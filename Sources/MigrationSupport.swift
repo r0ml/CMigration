@@ -244,7 +244,7 @@ extension FileHandle.AsyncBytes {
         }
         
       mutating public func next() async throws -> String? {
-            while let byte = try await asyncBytes.next() {
+        while let byte = try await asyncBytes.next() {
                 buffer.append(byte)
                 
                 // Check for newline (\n)
