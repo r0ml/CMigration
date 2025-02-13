@@ -106,7 +106,7 @@ where Base: AsyncSequence, Base.Element == UInt8 {
   }
 }
 
-func regerror(_ n : Int32, _ regx : regex_t )  -> String {
+public func regerror(_ n : Int32, _ regx : regex_t )  -> String {
   var re = regx
   let s = withUnsafeMutablePointer(to: &re) { rr in
      regerror(n, rr, nil, 0)
@@ -121,7 +121,7 @@ func regerror(_ n : Int32, _ regx : regex_t )  -> String {
   return p
 }
 
-func posixRename(from oldPath: String, to newPath: String) throws {
+public func posixRename(from oldPath: String, to newPath: String) throws {
     if rename(oldPath, newPath) != 0 {
         // If an error occurs, capture it using errno
         throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno), userInfo: nil)
@@ -130,7 +130,7 @@ func posixRename(from oldPath: String, to newPath: String) throws {
 
 /// Calculates the display width of a character.
 /// Swift does not have a direct equivalent to C's `wcwidth`, so we provide a basic implementation.
-func wcwidth(_ ch: Character) -> Int {
+public func wcwidth(_ ch: Character) -> Int {
   // Simplified: Most characters occupy width 1. You can enhance this with more accurate width calculations if needed.
   let scalars = String(ch).unicodeScalars
   for scalar in scalars {
@@ -162,7 +162,7 @@ func wcwidth(_ wc: Unicode.Scalar) -> Int {
 /// Returns `true` if the given Unicode scalar is considered printable.
 /// - Parameter scalar: A UnicodeScalar to test.
 /// - Returns: A Boolean value that is `true` if the scalar is printable.
-func iswprint(_ char: Character) -> Bool {
+public func iswprint(_ char: Character) -> Bool {
     // For ASCII, only characters between space (0x20) and tilde (0x7E) are printable.
   let scalars = char.unicodeScalars
   if scalars.count > 1 { return true }
