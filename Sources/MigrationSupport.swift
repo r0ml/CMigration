@@ -19,6 +19,16 @@
 
 import Foundation
 
+public struct CmdErr : Error {
+  public var code : Int
+  public var message : String
+  
+  public init(_ code : Int, _ message : String = "") {
+    self.code = code
+    self.message = message
+  }
+}
+
 public protocol ShellCommand {
   associatedtype CommandOptions
   func parseOptions() async throws(CmdErr) -> CommandOptions
@@ -112,8 +122,6 @@ extension Character {
     guard let c else { return nil }
     return Character(UnicodeScalar(c))
   }
-
-  
 }
 
 
