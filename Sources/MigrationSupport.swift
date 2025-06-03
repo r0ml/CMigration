@@ -17,7 +17,7 @@
   OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-import Foundation
+import SystemPackage
 
 public struct CmdErr : Error {
   public var code : Int
@@ -49,7 +49,7 @@ extension ShellCommand {
     do {
       options = try await parseOptions()
     } catch(let e) {
-      var fh = FileHandle.standardError
+      var fh = FileDescriptor.standardError
       if (!e.message.isEmpty) { print("\(e.message)", to: &fh) }
       print(usage, to: &fh)
       return Int32(e.code)
@@ -59,7 +59,7 @@ extension ShellCommand {
       try await runCommand(options)
       return 0
     } catch(let e) {
-      var fh = FileHandle.standardError
+      var fh = FileDescriptor.standardError
       if (!e.message.isEmpty) { print("\(String(cString: getprogname()!)): \(e.message)", to: &fh) }
       return Int32(e.code)
     }
@@ -125,6 +125,15 @@ extension Character {
 }
 
 
+extension FileDescriptor: @retroactive TextOutputStream {
+  public mutating func write(_ string: String) {
+    let _ = try? string.utf8CString.withUnsafeBytes {
+      try self.write($0)
+    }
+  }
+}
+
+/*
 #if swift(>=6.0)
 
  extension FileHandle: @retroactive TextOutputStream {
@@ -141,6 +150,7 @@ extension Character {
     }
   }
 #endif
+*/
 
 
 public func WEXITSTATUS(_ x : Int32) -> Int32 { return (x >> 8) & 0x0ff }
@@ -175,7 +185,7 @@ public func isThere(candidate: String) -> Bool {
 public func searchPath(for filename: String) -> String? {
   var candidate = ""
   
-  let path = ProcessInfo.processInfo.environment["PATH"] ?? _PATH_DEFPATH //   "/usr/bin:/bin"
+  let path = getenv("PATH") ?? _PATH_DEFPATH //   "/usr/bin:/bin"
   
   if filename.contains("/") {
     return filename

@@ -1,8 +1,75 @@
 // Copyright (c) 1868 Charles Babbage
 // Modernized by Robert "r0ml" Lefkowitz <code@liberally.net> in 2025
 
-import Foundation
+import SystemPackage
 
+
+struct ForwardParserX : Unicode.Parser {
+  mutating func parseScalar<I>(from input: inout I) -> Unicode.ParseResult<CollectionOfOne<UInt8>> where I : IteratorProtocol, I.Element == UInt8 {
+    if let z = input.next() {
+      let x = CollectionOfOne(UInt8(z) )
+      return Unicode.ParseResult.valid(x)
+    } else {
+      return Unicode.ParseResult.emptyInput
+    }
+  }
+  
+  typealias Encoding = ISOLatin1
+}
+
+struct ReverseParserX : Unicode.Parser {
+  mutating func parseScalar<I>(from input: inout I) -> Unicode.ParseResult<CollectionOfOne<UInt8>> where I : IteratorProtocol, I.Element == UInt8 {
+    if let z = input.next() {
+      let x = CollectionOfOne(UInt8(z) )
+      return Unicode.ParseResult.valid(x)
+    } else {
+      return Unicode.ParseResult.emptyInput
+    }
+  }
+  
+  typealias Encoding = ISOLatin1
+  
+  
+}
+
+struct ISOLatin1: Unicode.Encoding {
+  static let encodedReplacementCharacter: CollectionOfOne<UInt8> = .init(UInt8(0))
+  
+  static func decode(_ content: CollectionOfOne<UInt8>) -> Unicode.Scalar {
+    return Unicode.Scalar(content.first!)
+  }
+  
+  static func encode(_ content: Unicode.Scalar) -> CollectionOfOne<UInt8>? {
+    return CollectionOfOne( UInt8(content.value) )
+  }
+  
+    typealias CodeUnit = UInt8
+    typealias EncodedScalar = CollectionOfOne<UInt8>
+  typealias ForwardParser = ForwardParserX
+  typealias ReverseParser = ReverseParserX
+  
+/*
+  /// Decodes a single ISO Latin 1 code unit into a Unicode scalar.
+  static func decode(_ input: EncodedScalar) -> UnicodeDecodingResult {
+        guard let first = input.first else {
+            return .emptyInput
+        }
+        let scalar = UnicodeScalar(first)
+        return .scalarValue(scalar)
+    }
+
+    /// Encodes a single Unicode scalar into an ISO Latin 1 code unit.
+  static func encode(_ scalar: UnicodeScalar) -> EncodedScalar {
+        precondition(scalar.value <= 0xFF, "Scalar out of ISO-8859-1 range")
+        return CollectionOfOne(UInt8(scalar.value))
+ }
+ */
+}
+
+
+
+// FIXME: do the swift-system version of this
+/*
 extension FileHandle.AsyncBytes {
   /// Asynchronously reads lines from the `AsyncBytes` stream.
   public var linesNLX : AsyncLineSequenceX<FileHandle.AsyncBytes> {
@@ -10,6 +77,9 @@ extension FileHandle.AsyncBytes {
   }
   
 }
+*/
+
+
 /// A reimplementation of Swifts AsyncLineSequence in order to support legacy C command semantics.
 /// These include:
 ///     - including the newline character as part of the result (to distinguish end-of-file-with-no-eol situations
@@ -28,9 +98,9 @@ where Base: AsyncSequence, Base.Element == UInt8 {
     
     var _base: Base.AsyncIterator
     var _peek: UInt8?
-    var encoding : String.Encoding = .utf8
+    var encoding : any Unicode.Encoding.Type = UTF8.self
     
-    public init(_ base : Base.AsyncIterator, encoding : String.Encoding = .utf8) {
+    public init(_ base : Base.AsyncIterator, encoding : any Unicode.Encoding.Type = UTF8.self ) {
       self._base = base
       self._peek = nil
       
@@ -39,11 +109,11 @@ where Base: AsyncSequence, Base.Element == UInt8 {
       let kkk = kk.split(separator: ".").last ?? "C"
       
       // FIXME: map other encodings properly
-      let ase = String.availableStringEncodings
+      // let ase = String.availableStringEncodings
       switch kkk {
-        case "C": self.encoding = .isoLatin1
-        case "UTF-8": self.encoding = .utf8
-        default: self.encoding = .utf8
+        case "C": self.encoding =   ISOLatin1.self
+        case "UTF-8": self.encoding = UTF8.self
+        default: self.encoding = UTF8.self
       }
 
     }
@@ -79,7 +149,16 @@ where Base: AsyncSequence, Base.Element == UInt8 {
       
       // Don't return an empty line when at end of file
       if !_buffer.isEmpty {
-        return String(bytes: _buffer, encoding: self.encoding)
+//        return String(bytes: _buffer, encoding: self.encoding)
+        var j : String
+        if self.encoding == ISOLatin1.self {
+          j = String(decoding: _buffer, as: ISOLatin1.self)
+        } else if self.encoding == UTF8.self {
+          j =  String(decoding: _buffer, as: UTF8.self)
+        } else {
+          j =  String(decoding: _buffer, as: UTF8.self)
+        }
+        return j
         //              return _buffer
       } else {
         return nil
@@ -89,9 +168,9 @@ where Base: AsyncSequence, Base.Element == UInt8 {
   }
   
   let base: Base
-  let encoding : String.Encoding
+  let encoding : any Unicode.Encoding.Type
   
-  public init(_ base: Base, encoding: String.Encoding = .utf8) {
+  public init(_ base: Base, encoding: any Unicode.Encoding.Type = UTF8.self ) {
     self.base = base
     self.encoding = encoding
   }
@@ -124,7 +203,8 @@ public func regerror(_ n : Int32, _ regx : regex_t )  -> String {
 public func posixRename(from oldPath: String, to newPath: String) throws {
     if rename(oldPath, newPath) != 0 {
         // If an error occurs, capture it using errno
-        throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno), userInfo: nil)
+//        throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno), userInfo: nil)
+      throw Errno(rawValue: errno)
     }
 }
 

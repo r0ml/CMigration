@@ -82,8 +82,6 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-import Foundation
-
 public enum argType: Int32 {
   case no_argument = 0
   case required_argument = 1
@@ -283,7 +281,7 @@ public class BSDGetopt_long {
     }
 
     if match != -1 { // option found
-      if let has_equal, long_options[match].has_arg == .no_argument {
+      if let _ = has_equal, long_options[match].has_arg == .no_argument {
         // FIXME: do I need to set optopt (or pass it to CmdErr)
         throw CmdErr(
           1, "option \(current_dash)\(current_key) doesn't allow an argument")
