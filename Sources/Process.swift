@@ -51,7 +51,7 @@ public enum ProcessError: Error, CustomStringConvertible {
 }
 
 public struct ProcessRunner {
-    public static func run(command: String, arguments: [String]) throws -> ProcessResult {
+  public static func run(command: String, arguments: [String], currentDirectory : String? = nil) throws -> ProcessResult {
         let stdoutPipe = try FileDescriptor.pipe()
         let stderrPipe = try FileDescriptor.pipe()
 
@@ -65,6 +65,10 @@ public struct ProcessRunner {
         var fileActions: posix_spawn_file_actions_t?
         posix_spawn_file_actions_init(&fileActions)
 
+      if let cwd = currentDirectory {
+          posix_spawn_file_actions_addchdir_np(&fileActions, cwd)
+      }
+      
         // Redirect stdout and stderr
         posix_spawn_file_actions_adddup2(&fileActions, stdoutPipe.writeEnd.rawValue, STDOUT_FILENO)
         posix_spawn_file_actions_adddup2(&fileActions, stderrPipe.writeEnd.rawValue, STDERR_FILENO)
