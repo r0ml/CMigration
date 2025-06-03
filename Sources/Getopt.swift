@@ -605,7 +605,7 @@ public class BSDGetopt {
     }
 
     // Does this option need an argument?
-    if ostr.contains("\(optopt):") {
+    if !ostr.contains("\(optopt):") {
       // don't need argument
       optarg = ""
       if place.isEmpty { nargv.removeFirst() }
