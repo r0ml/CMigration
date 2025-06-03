@@ -304,15 +304,15 @@ public func readFileAsString(at path: String) throws -> String {
 
 
 extension Substring {
-    public func trimming(_ shouldTrim: (Character) -> Bool) -> Substring {
+    public func trimming(_ shouldTrim: [Character]) -> Substring {
         var start = startIndex
         var end = endIndex
 
-        while start < end && shouldTrim(self[start]) {
+      while start < end && shouldTrim.contains(self[start]) {
             formIndex(after: &start)
         }
 
-        while end > start && shouldTrim(self[index(before: end)]) {
+      while end > start && shouldTrim.contains(self[index(before: end)]) {
             formIndex(before: &end)
         }
 
