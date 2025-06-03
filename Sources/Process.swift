@@ -21,7 +21,7 @@ public enum ProcessError: Error, CustomStringConvertible {
     case nonZeroExit(code: Int32, stdout: String, stderr: String)
     case spawnFailed(errno: Int32)
 
-    var description: String {
+    public var description: String {
         switch self {
         case .nonZeroExit(let code, let out, let err):
             return "Process failed with exit code \(code).\nstdout:\n\(out)\nstderr:\n\(err)"
