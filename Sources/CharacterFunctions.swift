@@ -304,7 +304,7 @@ public func readFileAsString(at path: String) throws -> String {
 
 
 extension Substring {
-    func trimming(_ shouldTrim: (Character) -> Bool) -> Substring {
+    public func trimming(_ shouldTrim: (Character) -> Bool) -> Substring {
         var start = startIndex
         var end = endIndex
 
