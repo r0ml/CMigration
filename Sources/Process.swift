@@ -32,7 +32,7 @@ public enum ProcessError: Error, CustomStringConvertible {
 }
 
 public struct ProcessRunner {
-    static func run(command: String, arguments: [String]) throws -> ProcessResult {
+    public static func run(command: String, arguments: [String]) throws -> ProcessResult {
         let stdoutPipe = try FileDescriptor.pipe()
         let stderrPipe = try FileDescriptor.pipe()
 
