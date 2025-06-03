@@ -266,3 +266,20 @@ public func iswprint(_ char: Character) -> Bool {
         }
     }
 }
+
+
+public func cFormat(_ format: String, _ args: CVarArg...) -> String {
+    let bufferSize = 1024
+    var buffer = [UInt8](repeating: 0, count: bufferSize)
+
+    let _ = withVaList(args) { vaPtr in
+        vsnprintf(&buffer, bufferSize, format, vaPtr)
+    }
+
+  return String(decoding: buffer, as: UTF8.self)
+}
+
+public func cFormat(_ format: String, _ args: String) -> String {
+  return args.withCString { c in cFormat(format, c) }
+}
+
