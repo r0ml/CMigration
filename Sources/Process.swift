@@ -12,12 +12,12 @@ public func getenv(_ name: String) -> String? {
   }
 }
 
-struct ProcessResult {
+public struct ProcessResult {
     let stdout: String
     let stderr: String
 }
 
-enum ProcessError: Error, CustomStringConvertible {
+public enum ProcessError: Error, CustomStringConvertible {
     case nonZeroExit(code: Int32, stdout: String, stderr: String)
     case spawnFailed(errno: Int32)
 
@@ -31,7 +31,7 @@ enum ProcessError: Error, CustomStringConvertible {
     }
 }
 
-struct ProcessRunner {
+public struct ProcessRunner {
     static func run(command: String, arguments: [String]) throws -> ProcessResult {
         let stdoutPipe = try FileDescriptor.pipe()
         let stderrPipe = try FileDescriptor.pipe()
