@@ -112,9 +112,9 @@ public func regerror(_ n : Int32, _ regx : regex_t )  -> String {
      regerror(n, rr, nil, 0)
   }
   
-  var p = withUnsafeTemporaryAllocation(of: UInt8.self, capacity: s) { b in
+  let p = withUnsafeTemporaryAllocation(of: UInt8.self, capacity: s) { b in
     withUnsafeMutablePointer(to: &re) {rr in
-      let j = regerror(n, rr, b.baseAddress!, s)
+      let _ = regerror(n, rr, b.baseAddress!, s)
       return String(cString: b.baseAddress!)
     }
   }
