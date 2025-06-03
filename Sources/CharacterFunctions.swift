@@ -301,3 +301,21 @@ public func readFileAsString(at path: String) throws -> String {
     // Decode as UTF-8
     return String(decoding: content, as: UTF8.self)
 }
+
+
+extension Substring {
+    func trimming(_ shouldTrim: (Character) -> Bool) -> Substring {
+        var start = startIndex
+        var end = endIndex
+
+        while start < end && shouldTrim(self[start]) {
+            formIndex(after: &start)
+        }
+
+        while end > start && shouldTrim(self[index(before: end)]) {
+            formIndex(before: &end)
+        }
+
+        return self[start..<end]
+    }
+}
