@@ -12,6 +12,25 @@ public func getenv(_ name: String) -> String? {
   }
 }
 
+public func getenv() -> [String:String] {
+  var env = [String: String]()
+  
+  var ptr = environ
+  while let current = ptr.pointee {
+    if let entry = String(validatingCString: current) {
+      if let equalIndex = entry.firstIndex(of: "=") {
+        let key = String(entry[..<equalIndex])
+        let value = String(entry[entry.index(after: equalIndex)...])
+        env[key] = value
+      }
+    }
+    ptr = ptr.advanced(by: 1)
+  }
+  return env
+}
+
+
+
 public struct ProcessResult {
     let stdout: String
     let stderr: String
