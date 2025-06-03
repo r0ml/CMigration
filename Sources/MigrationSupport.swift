@@ -17,7 +17,7 @@
   OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-import SystemPackage
+@_exported import SystemPackage
 
 public struct CmdErr : Error {
   public var code : Int
