@@ -272,11 +272,12 @@ public func cFormat(_ format: String, _ args: CVarArg...) -> String {
     let bufferSize = 1024
     var buffer = [UInt8](repeating: 0, count: bufferSize)
 
-    let _ = withVaList(args) { vaPtr in
-        vsnprintf(&buffer, bufferSize, format, vaPtr)
+  return buffer.withUnsafeMutableBufferPointer { ptr in
+    let n = withVaList(args) { vaPtr in
+      vsnprintf(ptr.baseAddress!, bufferSize, format, vaPtr)
     }
-
-  return String(decoding: buffer, as: UTF8.self)
+    return String(decoding: ptr, as: UTF8.self)
+  }
 }
 
 public func cFormat(_ format: String, _ args: String) -> String {
