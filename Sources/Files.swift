@@ -15,6 +15,32 @@ extension FileDescriptor.AsyncBytes {
 
 extension FileDescriptor {
   public var bytes : AsyncByteStream { get  { AsyncByteStream(fd: self) } }
+  
+  public init?(forReadingAtPath: String) throws {
+    if let z = try? Self.open(forReadingAtPath, .readOnly) {
+      self = z
+    } else {
+      return nil
+    }
+  }
+  
+  public init?(forWritingAtPath: String) throws {
+    if let z = try? Self.open(forWritingAtPath, .writeOnly) {
+      self = z
+    } else {
+      return nil
+    }
+  }
+  
+  public init?(forUpdatingAtPath: String) throws {
+    if let z = try? Self.open(forUpdatingAtPath, .readWrite) {
+      self = z
+    } else {
+      return nil
+    }
+  }
+
+  
 }
 
 public struct AsyncByteStream: AsyncSequence {
