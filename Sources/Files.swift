@@ -233,3 +233,16 @@ public func isExecutableFile(atPath: String) -> Bool {
         access(cPath, X_OK) == 0
     }
 }
+
+
+extension FileDescriptor {
+  public func readUpToCount(count: Int) throws -> [UInt8] {
+    var buffer = [UInt8](repeating: 0, count: count)
+    
+    let bytesRead = try buffer.withUnsafeMutableBytes {
+      try self.read(into: $0)
+    }
+    
+    return Array(buffer.prefix(bytesRead))
+  }
+}
