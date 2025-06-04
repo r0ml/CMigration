@@ -48,6 +48,8 @@ public struct AsyncByteStream: AsyncSequence {
     let fd: FileDescriptor
     let bufferSize: Int = 4096
 
+  public var lines : AsyncLineReader { get { AsyncLineReader(byteStream: self) } }
+  
     public struct AsyncIterator: AsyncIteratorProtocol {
         let fd: FileDescriptor
         var buffer = [UInt8]()
@@ -183,4 +185,38 @@ where Base: AsyncSequence, Base.Element == UInt8 {
   public func makeAsyncIterator() -> AsyncIterator {
     return AsyncIterator(self.base.makeAsyncIterator(), encoding: encoding)
   }
+}
+
+public struct AsyncLineReader: AsyncSequence {
+    public typealias Element = String
+    let byteStream: AsyncByteStream
+
+    public struct AsyncIterator: AsyncIteratorProtocol {
+        var byteIterator: AsyncByteStream.AsyncIterator
+        var buffer = [UInt8]()
+
+        public mutating func next() async throws -> String? {
+            while let byte = try await byteIterator.next() {
+                if byte == UInt8(ascii: "\n") {
+                    let line = String(decoding: buffer, as: UTF8.self)
+                    buffer.removeAll()
+                    return line
+                } else {
+                    buffer.append(byte)
+                }
+            }
+
+            if !buffer.isEmpty {
+                let line = String(decoding: buffer, as: UTF8.self)
+                buffer.removeAll()
+                return line
+            }
+
+            return nil
+        }
+    }
+
+    public func makeAsyncIterator() -> AsyncIterator {
+        AsyncIterator(byteIterator: byteStream.makeAsyncIterator())
+    }
 }
