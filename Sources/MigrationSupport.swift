@@ -124,15 +124,6 @@ extension Character {
   }
 }
 
-
-extension FileDescriptor: @retroactive TextOutputStream {
-  public mutating func write(_ string: String) {
-    let _ = try? string.utf8CString.withUnsafeBytes {
-      try self.write($0)
-    }
-  }
-}
-
 /*
 #if swift(>=6.0)
 

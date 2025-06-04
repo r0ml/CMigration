@@ -252,3 +252,13 @@ extension FileDescriptor {
     }
   }
 }
+
+
+extension FileDescriptor: @retroactive TextOutputStream {
+  public func write(_ string: String) {
+    let _ = try? string.utf8CString.withUnsafeBytes {
+      try self.write($0)
+    }
+  }
+}
+
