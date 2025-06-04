@@ -276,7 +276,7 @@ public func cFormat(_ format: String, _ args: CVarArg...) -> String {
     let n = withVaList(args) { vaPtr in
       vsnprintf(ptr.baseAddress!, bufferSize, format, vaPtr)
     }
-    return String(decoding: ptr, as: UTF8.self)
+    return String(decoding: ptr, as: ISOLatin1.self)
   }
 }
 
