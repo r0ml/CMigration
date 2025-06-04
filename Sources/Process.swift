@@ -51,7 +51,7 @@ public enum ProcessError: Error, CustomStringConvertible {
 }
 
 public struct ProcessRunner {
-  public static func run(command: String, arguments: [String], currentDirectory : String? = nil) throws -> ProcessResult {
+  public static func run(command: String, arguments: [String], currentDirectory : String? = nil, prelaunch: ((pid_t) -> ())? = nil ) throws -> ProcessResult {
         let stdoutPipe = try FileDescriptor.pipe()
         let stderrPipe = try FileDescriptor.pipe()
 
@@ -89,6 +89,10 @@ public struct ProcessRunner {
         guard spawnResult == 0 else {
             throw ProcessError.spawnFailed(errno: spawnResult)
         }
+    
+    if let prelaunch { prelaunch(pid) }
+    
+    
 
         // Close child ends in parent
         try stdoutPipe.writeEnd.close()
