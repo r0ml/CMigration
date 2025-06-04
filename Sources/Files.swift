@@ -245,4 +245,10 @@ extension FileDescriptor {
     
     return Array(buffer.prefix(bytesRead))
   }
+  
+  public func write(_ data : [UInt8]) throws -> Int {
+    try withUnsafeBytes(of: data) {
+      try self.write($0)
+    }
+  }
 }
