@@ -54,7 +54,7 @@ public struct ProcessRunner {
   public static func run(command: String, arguments: [String],
                          currentDirectory : String? = nil,
                          environment: [String: String]? = nil,
-                         prelaunch: ((pid_t) async -> ())? = nil ) async throws -> ProcessResult {
+                         prelaunch: (@Sendable (pid_t) async -> ())? = nil ) throws -> ProcessResult {
         let stdoutPipe = try FileDescriptor.pipe()
         let stderrPipe = try FileDescriptor.pipe()
 
@@ -105,7 +105,7 @@ public struct ProcessRunner {
             throw ProcessError.spawnFailed(errno: spawnResult)
         }
     
-    if let prelaunch { await prelaunch(pid) }
+    if let prelaunch { Task { await prelaunch(pid) } }
     
     
 
