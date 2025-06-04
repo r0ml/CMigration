@@ -16,28 +16,16 @@ extension FileDescriptor.AsyncBytes {
 extension FileDescriptor {
   public var bytes : AsyncByteStream { get  { AsyncByteStream(fd: self) } }
   
-  public init?(forReadingAtPath: String) {
-    if let z = try? Self.open(forReadingAtPath, .readOnly) {
-      self = z
-    } else {
-      return nil
-    }
+  public init(forReading: String) throws {
+    self = try Self.open(forReading, .readOnly)
   }
   
-  public init?(forWritingAtPath: String) {
-    if let z = try? Self.open(forWritingAtPath, .writeOnly) {
-      self = z
-    } else {
-      return nil
-    }
+  public init(forWriting: String) throws {
+    self = try Self.open(forWriting, .writeOnly)
   }
   
-  public init?(forUpdatingAtPath: String) {
-    if let z = try? Self.open(forUpdatingAtPath, .readWrite) {
-      self = z
-    } else {
-      return nil
-    }
+  public init(forUpdating: String) throws {
+    self = try Self.open(forUpdating, .readWrite)
   }
 
   
@@ -49,6 +37,7 @@ public struct AsyncByteStream: AsyncSequence {
     let bufferSize: Int = 4096
 
   public var lines : AsyncLineReader { get { AsyncLineReader(byteStream: self) } }
+//  public var linesNLX : AsyncLineSequenceX { get { AsyncLineSequenceX(base: self) } }
   
     public struct AsyncIterator: AsyncIteratorProtocol {
         let fd: FileDescriptor
