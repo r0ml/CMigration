@@ -15,7 +15,8 @@ extension FileDescriptor.AsyncBytes {
 
 extension FileDescriptor {
   public var bytes : AsyncByteStream { get  { AsyncByteStream(fd: self) } }
-  
+  public var characters : AsyncCharacterReader { get { AsyncCharacterReader(fd: self) } }
+
   public init(forReading: String) throws {
     self = try Self.open(forReading, .readOnly)
   }
@@ -251,3 +252,67 @@ extension FileDescriptor: @retroactive TextOutputStream {
   }
 }
 
+
+public struct AsyncCharacterReader: AsyncSequence {
+    public typealias Element = Character
+    public let fd: FileDescriptor
+    public let bufferSize: Int
+
+    public init(fd: FileDescriptor, bufferSize: Int = 4096) {
+        self.fd = fd
+        self.bufferSize = bufferSize
+    }
+
+    public struct AsyncIterator: AsyncIteratorProtocol {
+        let fd: FileDescriptor
+        let bufferSize: Int
+
+        var byteBuffer = [UInt8]()
+        var characterIterator: String.Iterator?
+
+        init(fd: FileDescriptor, bufferSize: Int) {
+            self.fd = fd
+            self.bufferSize = bufferSize
+        }
+
+        public mutating func next() async throws -> Character? {
+            if var iter = characterIterator, let nextChar = iter.next() {
+                characterIterator = iter
+                return nextChar
+            }
+
+            var tempBuffer = [UInt8](repeating: 0, count: bufferSize)
+            let bytesRead = try tempBuffer.withUnsafeMutableBytes {
+                try fd.read(into: $0)
+            }
+
+            if bytesRead == 0 {
+                return nil // EOF
+            }
+
+            byteBuffer.append(contentsOf: tempBuffer[..<bytesRead])
+
+            var decodedCount = byteBuffer.count
+            while decodedCount > 0 {
+                let slice = byteBuffer.prefix(decodedCount)
+                let decoded = String(decoding: slice, as: UTF8.self)
+                let reencoded = Array(decoded.utf8)
+
+                if reencoded.count == decodedCount {
+                    characterIterator = decoded.makeIterator()
+                    byteBuffer.removeFirst(decodedCount)
+                    return characterIterator?.next()
+                }
+
+                decodedCount -= 1
+            }
+
+            // Wait for more bytes to complete the UTF-8 sequence
+            return try await next()
+        }
+    }
+
+    public func makeAsyncIterator() -> AsyncIterator {
+        AsyncIterator(fd: fd, bufferSize: bufferSize)
+    }
+}
