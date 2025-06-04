@@ -4,8 +4,9 @@
 import SystemPackage
 
 
-struct ForwardParserX : Unicode.Parser {
-  mutating func parseScalar<I>(from input: inout I) -> Unicode.ParseResult<CollectionOfOne<UInt8>> where I : IteratorProtocol, I.Element == UInt8 {
+public struct ForwardParserX : Unicode.Parser {
+  public init() {}
+  public mutating func parseScalar<I>(from input: inout I) -> Unicode.ParseResult<CollectionOfOne<UInt8>> where I : IteratorProtocol, I.Element == UInt8 {
     if let z = input.next() {
       let x = CollectionOfOne(UInt8(z) )
       return Unicode.ParseResult.valid(x)
@@ -14,11 +15,12 @@ struct ForwardParserX : Unicode.Parser {
     }
   }
   
-  typealias Encoding = ISOLatin1
+  public typealias Encoding = ISOLatin1
 }
 
-struct ReverseParserX : Unicode.Parser {
-  mutating func parseScalar<I>(from input: inout I) -> Unicode.ParseResult<CollectionOfOne<UInt8>> where I : IteratorProtocol, I.Element == UInt8 {
+public struct ReverseParserX : Unicode.Parser {
+  public init() {}
+  public mutating func parseScalar<I>(from input: inout I) -> Unicode.ParseResult<CollectionOfOne<UInt8>> where I : IteratorProtocol, I.Element == UInt8 {
     if let z = input.next() {
       let x = CollectionOfOne(UInt8(z) )
       return Unicode.ParseResult.valid(x)
@@ -27,26 +29,26 @@ struct ReverseParserX : Unicode.Parser {
     }
   }
   
-  typealias Encoding = ISOLatin1
+  public typealias Encoding = ISOLatin1
   
   
 }
 
-struct ISOLatin1: Unicode.Encoding {
-  static let encodedReplacementCharacter: CollectionOfOne<UInt8> = .init(UInt8(0))
+public struct ISOLatin1: Unicode.Encoding {
+  public static let encodedReplacementCharacter: CollectionOfOne<UInt8> = .init(UInt8(0))
   
-  static func decode(_ content: CollectionOfOne<UInt8>) -> Unicode.Scalar {
+  public static func decode(_ content: CollectionOfOne<UInt8>) -> Unicode.Scalar {
     return Unicode.Scalar(content.first!)
   }
   
-  static func encode(_ content: Unicode.Scalar) -> CollectionOfOne<UInt8>? {
+  public static func encode(_ content: Unicode.Scalar) -> CollectionOfOne<UInt8>? {
     return CollectionOfOne( UInt8(content.value) )
   }
   
-    typealias CodeUnit = UInt8
-    typealias EncodedScalar = CollectionOfOne<UInt8>
-  typealias ForwardParser = ForwardParserX
-  typealias ReverseParser = ReverseParserX
+  public typealias CodeUnit = UInt8
+  public typealias EncodedScalar = CollectionOfOne<UInt8>
+  public typealias ForwardParser = ForwardParserX
+  public typealias ReverseParser = ReverseParserX
   
 /*
   /// Decodes a single ISO Latin 1 code unit into a Unicode scalar.
