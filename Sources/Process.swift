@@ -51,7 +51,10 @@ public enum ProcessError: Error, CustomStringConvertible {
 }
 
 public struct ProcessRunner {
-  public static func run(command: String, arguments: [String], currentDirectory : String? = nil, prelaunch: ((pid_t) async -> ())? = nil ) async throws -> ProcessResult {
+  public static func run(command: String, arguments: [String],
+                         currentDirectory : String? = nil,
+                         environment: [String: String]? = nil,
+                         prelaunch: ((pid_t) async -> ())? = nil ) async throws -> ProcessResult {
         let stdoutPipe = try FileDescriptor.pipe()
         let stderrPipe = try FileDescriptor.pipe()
 
@@ -78,12 +81,24 @@ public struct ProcessRunner {
         let argv: [UnsafeMutablePointer<CChar>?] = ([command] + arguments).map { strdup($0) } + [nil]
 
         var pid: pid_t = 0
-        let spawnResult = posix_spawn(&pid, command, &fileActions, nil, argv, environ)
+    
+    var ev = environ
+    if let environment {
+      ev = UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>.allocate(capacity: environment.count + 1)
+      defer { ev.deallocate() }
+      var i = 0
+      for (k, v) in environment {
+        ev[i] = strdup("\(k)=\(v)")
+        i += 1
+      }
+      ev[i] = nil
+    }
+        let spawnResult = posix_spawn(&pid, command, &fileActions, nil, argv, ev)
 
         for ptr in argv where ptr != nil {
             free(ptr)
         }
-
+    
         posix_spawn_file_actions_destroy(&fileActions)
 
         guard spawnResult == 0 else {
