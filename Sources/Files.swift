@@ -220,3 +220,10 @@ public struct AsyncLineReader: AsyncSequence {
         AsyncIterator(byteIterator: byteStream.makeAsyncIterator())
     }
 }
+
+public func fileExists(atPath: String) -> Bool {
+    var statBuf = stat()
+    return atPath.withCString { cPath in
+        stat(cPath, &statBuf) == 0
+    }
+}
