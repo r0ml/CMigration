@@ -227,3 +227,9 @@ public func fileExists(atPath: String) -> Bool {
         stat(cPath, &statBuf) == 0
     }
 }
+
+public func isExecutableFile(atPath: String) -> Bool {
+    return atPath.withCString { cPath in
+        access(cPath, X_OK) == 0
+    }
+}
