@@ -32,8 +32,8 @@ public func getenv() -> [String:String] {
 
 
 public struct ProcessResult {
-    let stdout: String
-    let stderr: String
+    public let stdout: String
+    public let stderr: String
 }
 
 public enum ProcessError: Error, CustomStringConvertible {
