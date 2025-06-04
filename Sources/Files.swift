@@ -316,3 +316,49 @@ public struct AsyncCharacterReader: AsyncSequence {
         AsyncIterator(fd: fd, bufferSize: bufferSize)
     }
 }
+
+
+
+public func readFileAsString(at path: String) throws -> String {
+    let fd = try FileDescriptor.open(path, .readOnly)
+    defer { try? fd.close() }
+
+    var content = [UInt8]()
+    var buffer = [UInt8](repeating: 0, count: 4096)
+
+    while true {
+        let bytesRead = try buffer.withUnsafeMutableBytes {
+            try fd.read(into: $0)
+        }
+        if bytesRead == 0 { break }
+        content.append(contentsOf: buffer[..<bytesRead])
+    }
+
+    // Decode as UTF-8
+    return String(decoding: content, as: UTF8.self)
+}
+
+public extension FileDescriptor {
+    /// Reads all bytes from the file until EOF.
+    /// - Parameter chunkSize: The size of each read operation (default: 4096 bytes).
+    /// - Returns: A `[UInt8]` array containing the full contents.
+    func readToEnd(chunkSize: Int = 4096) throws -> [UInt8] {
+        var buffer = [UInt8](repeating: 0, count: chunkSize)
+        var result = [UInt8]()
+
+        while true {
+            let bytesRead = try buffer.withUnsafeMutableBytes {
+                try self.read(into: $0)
+            }
+            if bytesRead == 0 {
+                break // EOF
+            }
+            result.append(contentsOf: buffer[..<bytesRead])
+        }
+
+        return result
+    }
+}
+
+
+

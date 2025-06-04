@@ -168,24 +168,7 @@ public func cFormat(_ format: String, _ args: String) -> String {
   return args.withCString { c in cFormat(format, c) }
 }
 
-public func readFileAsString(at path: String) throws -> String {
-    let fd = try FileDescriptor.open(path, .readOnly)
-    defer { try? fd.close() }
 
-    var content = [UInt8]()
-    var buffer = [UInt8](repeating: 0, count: 4096)
-
-    while true {
-        let bytesRead = try buffer.withUnsafeMutableBytes {
-            try fd.read(into: $0)
-        }
-        if bytesRead == 0 { break }
-        content.append(contentsOf: buffer[..<bytesRead])
-    }
-
-    // Decode as UTF-8
-    return String(decoding: content, as: UTF8.self)
-}
 
 
 extension Substring {
