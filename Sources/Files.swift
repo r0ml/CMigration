@@ -16,7 +16,7 @@ extension FileDescriptor.AsyncBytes {
 extension FileDescriptor {
   public var bytes : AsyncByteStream { get  { AsyncByteStream(fd: self) } }
   
-  public init?(forReadingAtPath: String) throws {
+  public init?(forReadingAtPath: String) {
     if let z = try? Self.open(forReadingAtPath, .readOnly) {
       self = z
     } else {
@@ -24,7 +24,7 @@ extension FileDescriptor {
     }
   }
   
-  public init?(forWritingAtPath: String) throws {
+  public init?(forWritingAtPath: String) {
     if let z = try? Self.open(forWritingAtPath, .writeOnly) {
       self = z
     } else {
@@ -32,7 +32,7 @@ extension FileDescriptor {
     }
   }
   
-  public init?(forUpdatingAtPath: String) throws {
+  public init?(forUpdatingAtPath: String) {
     if let z = try? Self.open(forUpdatingAtPath, .readWrite) {
       self = z
     } else {
