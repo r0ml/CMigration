@@ -180,14 +180,22 @@ where Base: AsyncSequence, Base.Element == UInt8 {
 public struct AsyncLineReader: AsyncSequence {
     public typealias Element = String
     let byteStream: AsyncByteStream
-
+  var retEOL = false
+  
+  public mutating func withEOL() -> Self {
+    retEOL = true
+    return self
+  }
+  
     public struct AsyncIterator: AsyncIteratorProtocol {
         var byteIterator: AsyncByteStream.AsyncIterator
         var buffer = [UInt8]()
-
+      var retEOL = false
+      
         public mutating func next() async throws -> String? {
             while let byte = try await byteIterator.next() {
                 if byte == UInt8(ascii: "\n") {
+                  if retEOL { buffer.append(byte) }
                     let line = String(decoding: buffer, as: UTF8.self)
                     buffer.removeAll()
                     return line
@@ -207,7 +215,7 @@ public struct AsyncLineReader: AsyncSequence {
     }
 
     public func makeAsyncIterator() -> AsyncIterator {
-        AsyncIterator(byteIterator: byteStream.makeAsyncIterator())
+      AsyncIterator(byteIterator: byteStream.makeAsyncIterator(), retEOL: retEOL)
     }
 }
 
