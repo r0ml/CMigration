@@ -38,6 +38,9 @@ public struct AsyncByteStream: AsyncSequence {
     let bufferSize: Int = 4096
 
   public var lines : AsyncLineReader { get { AsyncLineReader(byteStream: self) } }
+  public func lines(_ withEOL : Bool = false) -> AsyncLineReader {
+    return AsyncLineReader(byteStream: self, retEOL: withEOL)
+  }
 //  public var linesNLX : AsyncLineSequenceX { get { AsyncLineSequenceX(base: self) } }
   
     public struct AsyncIterator: AsyncIteratorProtocol {
