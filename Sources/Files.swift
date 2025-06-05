@@ -236,7 +236,7 @@ extension FileDescriptor {
     return Array(buffer.prefix(bytesRead))
   }
   
-  public func write(_ data : [UInt8]) throws -> Int {
+  @discardableResult public func write(_ data : [UInt8]) throws -> Int {
     try withUnsafeBytes(of: data) {
       try self.write($0)
     }
@@ -247,7 +247,7 @@ extension FileDescriptor {
 extension FileDescriptor: @retroactive TextOutputStream {
   public func write(_ string: String) {
     let _ = try? string.utf8CString.withUnsafeBytes {
-      try self.write($0)
+      try self.write($0.dropLast() )
     }
   }
 }
