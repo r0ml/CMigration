@@ -236,10 +236,8 @@ extension FileDescriptor {
     return Array(buffer.prefix(bytesRead))
   }
   
-  @discardableResult public func write(bytes data : [UInt8]) throws -> Int {
-    try withUnsafeBytes(of: data) {
-      try self.write($0)
-    }
+  @discardableResult public func write(_ data : [UInt8]) throws -> Int {
+    try self.writeAll(data)
   }
 }
 
