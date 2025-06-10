@@ -13,6 +13,8 @@ extension FileDescriptor.AsyncBytes {
 }
 */
 
+import Darwin
+
 extension FileDescriptor {
   public var bytes : AsyncByteStream { get  { AsyncByteStream(fd: self) } }
   public var characters : AsyncCharacterReader { get { AsyncCharacterReader(fd: self) } }
@@ -39,7 +41,7 @@ public struct AsyncByteStream: AsyncSequence {
 
   public var lines : AsyncLineReader { get { AsyncLineReader(byteStream: self) } }
   public func lines(_ withEOL : Bool = false) -> AsyncLineReader {
-    return AsyncLineReader(byteStream: self, retEOL: withEOL)
+    return AsyncLineReader(byteStream: self, retEOL:  withEOL)
   }
 //  public var linesNLX : AsyncLineSequenceX { get { AsyncLineSequenceX(base: self) } }
   
@@ -98,18 +100,19 @@ where Base: AsyncSequence, Base.Element == UInt8 {
     public init(_ base : Base.AsyncIterator, encoding : any Unicode.Encoding.Type = UTF8.self ) {
       self._base = base
       self._peek = nil
-      
-      let k = setlocale(LC_CTYPE, nil)
-      let kk = String(cString: k!)
-      let kkk = kk.split(separator: ".").last ?? "C"
-      
+
+      // FIXME: Tahoe gets rid of setlocale?
+      // let k = setlocale(LC_CTYPE, nil)
+      // let kk = String(cString: k!)
+      // let kkk = kk.split(separator: ".").last ?? "C"
+
       // FIXME: map other encodings properly
       // let ase = String.availableStringEncodings
-      switch kkk {
-        case "C": self.encoding =   ISOLatin1.self
-        case "UTF-8": self.encoding = UTF8.self
-        default: self.encoding = UTF8.self
-      }
+      // switch kkk {
+      //  case "C": self.encoding =   ISOLatin1.self
+      //  case "UTF-8": self.encoding = UTF8.self
+      //  default: self.encoding = UTF8.self
+      // }
 
     }
     
@@ -367,6 +370,8 @@ public extension FileDescriptor {
         return result
     }
 }
+
+
 
 
 

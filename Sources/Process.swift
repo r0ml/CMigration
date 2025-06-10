@@ -105,8 +105,8 @@ public struct ProcessRunner {
             throw ProcessError.spawnFailed(errno: spawnResult)
         }
     
-    if let prelaunch { Task { await prelaunch(pid) } }
-    
+    if let prelaunch { let p = pid; Task { await prelaunch(p) } }
+
     
 
         // Close child ends in parent
@@ -155,3 +155,4 @@ public struct ProcessRunner {
      print("Error: \(error)")
  }
  */
+
