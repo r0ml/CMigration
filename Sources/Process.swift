@@ -69,6 +69,7 @@ public struct ProcessRunner {
         posix_spawn_file_actions_init(&fileActions)
 
       if let cwd = currentDirectory {
+        // FIXME: not available on iOS
           posix_spawn_file_actions_addchdir_np(&fileActions, cwd)
       }
       

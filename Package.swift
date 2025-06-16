@@ -1,4 +1,4 @@
-// swift-tools-version: 6.0
+// swift-tools-version: 6.1
 
 /*
  The MIT License (MIT)
@@ -24,7 +24,7 @@ import PackageDescription
 let package = Package(
   name: "CMigration",
   // Mutex is only available in v15 or newer
-  platforms: [.macOS(.v15), .iOS(.v15)],
+  platforms: [.macOS(.v15), .iOS(.v16)],
   products: [
     .library(name: "CMigration", targets: ["CMigration"])],
   dependencies: [

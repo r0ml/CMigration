@@ -132,6 +132,20 @@ extension Substring {
 }
 
 
+
+extension StringProtocol {
+  public func wcwidth() -> Int {
+    return self.reduce(0) { (sum : Int, scal : Character) in
+      let t = scal.wcwidth
+      if t > 0 { return sum + Int(t) }
+      else { return sum }
+    }
+  }
+}
+
+
+
+
 extension Character {
 
   public var isEmoji : Bool {
