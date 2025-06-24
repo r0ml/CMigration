@@ -40,8 +40,8 @@ public struct AsyncByteStream: AsyncSequence {
     let bufferSize: Int = 4096
 
   public var lines : AsyncLineReader { get { AsyncLineReader(byteStream: self) } }
-  public func lines(_ withEOL : Bool = false) -> AsyncLineReader {
-    return AsyncLineReader(byteStream: self, retEOL:  withEOL)
+  public func lines(_ withEOL : Bool = false, encoding: any Unicode.Encoding.Type = UTF8.self) -> AsyncLineReader {
+    return AsyncLineReader(byteStream: self, retEOL:  withEOL, encoding: encoding)
   }
 //  public var linesNLX : AsyncLineSequenceX { get { AsyncLineSequenceX(base: self) } }
   
@@ -190,7 +190,7 @@ public struct AsyncLineReader: AsyncSequence {
     let byteStream: AsyncByteStream
   var retEOL = false
   var encoding : any Unicode.Encoding.Type = UTF8.self
-  
+
   public mutating func withEOL() -> Self {
     retEOL = true
     return self
