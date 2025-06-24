@@ -303,3 +303,24 @@ extension UnicodeScalar {
   }
 
 }
+
+
+
+public func validatedStringFromUTF16Buffer(_ buffer: [UInt16]) -> String? {
+    var decoder = UTF16()
+    var iterator = buffer.makeIterator()
+    var string = ""
+
+    decodeLoop: while true {
+        switch decoder.decode(&iterator) {
+        case .scalarValue(let scalar):
+            string.unicodeScalars.append(scalar)
+        case .emptyInput:
+            break decodeLoop
+        case .error:
+            return nil  // invalid UTF-16
+        }
+    }
+
+    return string
+}

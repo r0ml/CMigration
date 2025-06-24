@@ -82,7 +82,8 @@ public struct AsyncByteStream: AsyncSequence {
 ///     - including the newline character as part of the result (to distinguish end-of-file-with-no-eol situations
 ///     - supporting different encodings (other than UTF-8)
 ///     - supporting different line endings
-public struct AsyncLineSequenceX<Base>: AsyncSequence
+/*
+ public struct AsyncLineSequenceX<Base>: AsyncSequence
 where Base: AsyncSequence, Base.Element == UInt8 {
   
   /// The type of element produced by this asynchronous sequence.
@@ -182,46 +183,65 @@ where Base: AsyncSequence, Base.Element == UInt8 {
     return AsyncIterator(self.base.makeAsyncIterator(), encoding: encoding)
   }
 }
+*/
 
 public struct AsyncLineReader: AsyncSequence {
     public typealias Element = String
     let byteStream: AsyncByteStream
   var retEOL = false
+  var encoding : any Unicode.Encoding.Type = UTF8.self
   
   public mutating func withEOL() -> Self {
     retEOL = true
     return self
   }
   
-    public struct AsyncIterator: AsyncIteratorProtocol {
-        var byteIterator: AsyncByteStream.AsyncIterator
-        var buffer = [UInt8]()
-      var retEOL = false
-      
-        public mutating func next() async throws -> String? {
-            while let byte = try await byteIterator.next() {
-                if byte == UInt8(ascii: "\n") {
-                  if retEOL { buffer.append(byte) }
-                    let line = String(decoding: buffer, as: UTF8.self)
-                    buffer.removeAll()
-                    return line
-                } else {
-                    buffer.append(byte)
-                }
-            }
+  public struct AsyncIterator: AsyncIteratorProtocol {
+    var byteIterator: AsyncByteStream.AsyncIterator
+    var buffer = [UInt8]()
+    var retEOL = false
+    var encoding : any Unicode.Encoding.Type = UTF8.self
 
-            if !buffer.isEmpty {
-                let line = String(decoding: buffer, as: UTF8.self)
-                buffer.removeAll()
-                return line
-            }
-
-            return nil
+    public mutating func next() async throws -> String? {
+      var go = false
+      while let byte = try await byteIterator.next() {
+        go = true
+        if byte == UInt8(ascii: "\n") {
+          if retEOL { buffer.append(byte) }
+          break
+        } else {
+          buffer.append(byte)
         }
+      }
+
+      guard go else { return nil }
+      var line : String?
+      switch encoding {
+        case is ISOLatin1.Type:
+          line = String(validating: buffer, as: ISOLatin1.self )
+        case is UTF16.Type:
+        let buff = buffer.withUnsafeBytes { $0.load(as: [UInt16].self) }
+          line = String(validating: buff, as: UTF16.self )
+        case is UTF32.Type:
+          let buff = buffer.withUnsafeBytes { $0.load(as: [UInt32].self) }
+          line = String(validating: buff, as: UTF32.self )
+        case is UTF8.Type:
+          fallthrough
+        default:
+          line = String(validating: buffer, as: UTF8.self )
+      }
+      guard let line else {
+        line = String(validating: buffer, as: ISOLatin1.self )
+        buffer.removeAll()
+        return line
+      }
+      buffer.removeAll()
+      return line
     }
+  }
 
     public func makeAsyncIterator() -> AsyncIterator {
-      AsyncIterator(byteIterator: byteStream.makeAsyncIterator(), retEOL: retEOL)
+      AsyncIterator(byteIterator: byteStream.makeAsyncIterator(), retEOL: retEOL, encoding: encoding)
     }
 }
 
