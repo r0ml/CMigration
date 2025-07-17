@@ -3,6 +3,7 @@
 
 import SystemPackage
 
+import Darwin
 
 public struct ForwardParserX : Unicode.Parser {
   public init() {}
@@ -68,7 +69,7 @@ public struct ISOLatin1: Unicode.Encoding {
  */
 }
 
-public func regerror(_ n : Int32, _ regx : regex_t )  -> String {
+public func regerror(_ n : Int32, _ regx : Darwin.regex_t )  -> String {
   var re = regx
   let s = withUnsafeMutablePointer(to: &re) { rr in
      regerror(n, rr, nil, 0)

@@ -19,6 +19,8 @@
 
 @_exported import SystemPackage
 
+import Darwin
+
 public struct CmdErr : Error {
   public var code : Int
   public var message : String

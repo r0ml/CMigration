@@ -82,6 +82,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+import Darwin
+
 public enum argType: Int32 {
   case no_argument = 0
   case required_argument = 1
@@ -429,7 +431,7 @@ public class BSDGetopt_long {
         dash_prefix = DD_PREFIX
 
       } else if place.first != ":"
-        && strchr(options, Int32(UnicodeScalar(place.first!.asciiValue!).value))
+                  && Darwin.strchr(options, Int32(UnicodeScalar(place.first!.asciiValue!).value))
           != nil
       {
         short_too = true /* could be short option too */
