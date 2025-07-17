@@ -51,7 +51,7 @@ extension ShellCommand {
     } catch(let e) {
       var fh = FileDescriptor.standardError
       if (!e.message.isEmpty) { print("\(e.message)", to: &fh) }
-      print(usage, to: &fh)
+      print(usage, to: &fh) 
       return Int32(e.code)
     }
     

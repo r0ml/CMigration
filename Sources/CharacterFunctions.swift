@@ -324,3 +324,40 @@ public func validatedStringFromUTF16Buffer(_ buffer: [UInt16]) -> String? {
 
     return string
 }
+
+func firstInvalidUTF8Index(in bytes: [UInt8]) -> Int? {
+    var decoder = UTF8()
+    var iterator = bytes.makeIterator()
+    var index = 0
+
+    while true {
+        let decoding = decoder.decode(&iterator)
+        switch decoding {
+        case .scalarValue:
+            // Valid scalar, move to next
+            index += 1
+        case .emptyInput:
+            // Reached end of input
+            return nil
+        case .error:
+            // Found invalid byte
+            return index
+        }
+    }
+}
+
+func getStringEncoding() -> (any Unicode.Encoding.Type)? {
+  let codeset = String(cString: nl_langinfo(CODESET))
+    switch codeset.uppercased() {
+    case "UTF-8":
+        return UTF8.self
+    case "ISO-8859-1", "LATIN1":
+        return ISOLatin1.self
+    case "UTF-16":
+        return UTF16.self
+//    case "US-ASCII", "ASCII":
+//        return .ascii
+    default:
+        return nil
+    }
+}

@@ -2,7 +2,7 @@
 // Modernized by Robert "r0ml" Lefkowitz <code@liberally.net> in 2025
 
 import SystemPackage
-@_exported import Darwin
+import Darwin
 
 public func getenv(_ name: String) -> String? {
   if let a = Darwin.getenv(name) {
