@@ -421,7 +421,7 @@ public extension FileDescriptor {
 
 
 public struct POSIXErrno: Error {
-    let code: Int32
+    public let code: Int32
 
   public init(_ code: Int32 = errno) {
     self.code = code
