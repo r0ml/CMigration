@@ -436,7 +436,7 @@ public struct POSIXErrno: Error {
   }
 }
 
-public let MAXPATHLEN = Darwin.MAXPATHLEN
+public let MAXPATHLEN : Int = Int(Darwin.MAXPATHLEN)
 
 public func basename(_ path : String) throws(POSIXErrno) -> String {
   // Empty string gets treated as "."
