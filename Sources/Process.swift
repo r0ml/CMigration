@@ -29,6 +29,14 @@ public func getenv() -> [String:String] {
   return env
 }
 
+public func setenv(_ name : String, value: String) {
+  Darwin.setenv(name, value, 1)
+}
+
+public func unsetenv(_ name : String) {
+  Darwin.unsetenv(name)
+}
+
 
 
 public struct ProcessResult {
