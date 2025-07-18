@@ -197,3 +197,13 @@ public struct ProcessRunner {
      print("Error: \(error)")
  }
  */
+
+/**
+ Implemented for find.
+ This could possibly be replaced by using posix_spawn
+ */
+public func execvp(_ x : String, _ a : [String]) -> POSIXErrno {
+  let az = a.map { $0.withCString { strdup($0) } } + [UnsafeMutablePointer<CChar>.init(bitPattern: 0)]
+  Darwin.execvp(x, az )
+  return POSIXErrno()
+}
