@@ -54,15 +54,27 @@ public struct ProcessRunner {
   public static func run(command: String, arguments: [String],
                          currentDirectory : String? = nil,
                          environment: [String: String]? = nil,
-                         prelaunch: (@Sendable (pid_t) async -> ())? = nil ) throws -> ProcessResult {
-        let stdoutPipe = try FileDescriptor.pipe()
-        let stderrPipe = try FileDescriptor.pipe()
+                         prelaunch: (@Sendable (pid_t) async -> ())? = nil,
+                         captureStdout: Bool = true,
+                         captureStderr: Bool = true) throws -> ProcessResult {
+
+    let stdoutPipe : (readEnd: FileDescriptor, writeEnd: FileDescriptor)? = nil
+
+    if captureStdout {
+      stdoutPipe = try FileDescriptor.pipe()
+    }
+
+    let stderrPipe : (readEnd: FileDescriptor, writeEnd: FileDescriptor)? = nil
+
+    if captureStderr {
+      stderrPipe = try FileDescriptor.pipe()
+    }
 
         defer {
-            try? stdoutPipe.readEnd.close()
-            try? stdoutPipe.writeEnd.close()
-            try? stderrPipe.readEnd.close()
-            try? stderrPipe.writeEnd.close()
+            try? stdoutPipe?.readEnd.close()
+            try? stdoutPipe?.writeEnd.close()
+            try? stderrPipe?.readEnd.close()
+            try? stderrPipe?.writeEnd.close()
         }
 
         var fileActions: posix_spawn_file_actions_t?
@@ -74,10 +86,15 @@ public struct ProcessRunner {
       }
       
         // Redirect stdout and stderr
-        posix_spawn_file_actions_adddup2(&fileActions, stdoutPipe.writeEnd.rawValue, STDOUT_FILENO)
-        posix_spawn_file_actions_adddup2(&fileActions, stderrPipe.writeEnd.rawValue, STDERR_FILENO)
-        posix_spawn_file_actions_addclose(&fileActions, stdoutPipe.readEnd.rawValue)
-        posix_spawn_file_actions_addclose(&fileActions, stderrPipe.readEnd.rawValue)
+    if captureStdout {
+      posix_spawn_file_actions_adddup2(&fileActions, stdoutPipe!.writeEnd.rawValue, STDOUT_FILENO)
+      posix_spawn_file_actions_addclose(&fileActions, stdoutPipe!.readEnd.rawValue)
+    }
+
+    if captureStderr {
+      posix_spawn_file_actions_adddup2(&fileActions, stderrPipe!.writeEnd.rawValue, STDERR_FILENO)
+      posix_spawn_file_actions_addclose(&fileActions, stderrPipe!.readEnd.rawValue)
+    }
 
         let argv: [UnsafeMutablePointer<CChar>?] = ([command] + arguments).map { strdup($0) } + [nil]
 
@@ -111,12 +128,21 @@ public struct ProcessRunner {
     
 
         // Close child ends in parent
-        try stdoutPipe.writeEnd.close()
-        try stderrPipe.writeEnd.close()
+    var stdo : String = ""
+    var stde : String = ""
 
-        // Capture stdout
-        let stdout = try readAll(from: stdoutPipe.readEnd)
-        let stderr = try readAll(from: stderrPipe.readEnd)
+    if captureStdout {
+      // Capture stdout
+      try stdoutPipe!.writeEnd.close()
+      stdo = try readAll(from: stdoutPipe!.readEnd)
+    }
+    if captureStderr {
+      try stderrPipe!.writeEnd.close()
+      stde = try readAll(from: stderrPipe!.readEnd)
+    }
+
+
+
 
         // Wait for child
         var status: Int32 = 0
@@ -124,10 +150,10 @@ public struct ProcessRunner {
         let exitCode = WIFEXITED(status) ? WEXITSTATUS(status) : -1
 
         if exitCode != 0 {
-            throw ProcessError.nonZeroExit(code: exitCode, stdout: stdout, stderr: stderr)
+            throw ProcessError.nonZeroExit(code: exitCode, stdout: stdo, stderr: stde)
         }
 
-        return ProcessResult(stdout: stdout, stderr: stderr)
+        return ProcessResult(stdout: stdo, stderr: stde)
     }
 
     private static func readAll(from fd: FileDescriptor) throws -> String {
@@ -139,7 +165,7 @@ public struct ProcessRunner {
                 try fd.read(into: $0)
             }
             if bytesRead == 0 { break }
-            output += String(decoding: buffer[..<bytesRead], as: UTF8.self)
+                output += String(decoding: buffer[..<bytesRead], as: UTF8.self)
         }
 
         return output
@@ -150,10 +176,10 @@ public struct ProcessRunner {
  example usage:
  
  do {
-     let result = try ProcessRunner.run(command: "/bin/ls", arguments: ["-l", "/no/such/dir"])
-     print(result.output)
+     let result = try ProcessRunner.run(command: "/bin/ls", arguments: ["-l", "/no/such/dir"], forwardStdoutToParent: true)
+     // When forwarding is enabled, the corresponding field in ProcessResult will be an empty string.
+     print(result.stdout)
  } catch {
      print("Error: \(error)")
  }
  */
-
