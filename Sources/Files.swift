@@ -41,6 +41,7 @@ extension FileDescriptor.AsyncBytes {
 */
 
 import Darwin
+@_exported import errno_h
 
 extension FileDescriptor {
   public var bytes : AsyncByteStream { get  { AsyncByteStream(fd: self) } }
@@ -434,6 +435,8 @@ public struct POSIXErrno: Error {
     return description
   }
 }
+
+public let MAXPATHLEN = Darwin.MAXPATHLEN
 
 public func basename(_ path : String) throws(POSIXErrno) -> String {
   // Empty string gets treated as "."
