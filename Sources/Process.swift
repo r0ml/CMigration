@@ -58,13 +58,13 @@ public struct ProcessRunner {
                          captureStdout: Bool = true,
                          captureStderr: Bool = true) throws -> ProcessResult {
 
-    let stdoutPipe : (readEnd: FileDescriptor, writeEnd: FileDescriptor)? = nil
+    var stdoutPipe : (readEnd: FileDescriptor, writeEnd: FileDescriptor)? = nil
 
     if captureStdout {
       stdoutPipe = try FileDescriptor.pipe()
     }
 
-    let stderrPipe : (readEnd: FileDescriptor, writeEnd: FileDescriptor)? = nil
+    var stderrPipe : (readEnd: FileDescriptor, writeEnd: FileDescriptor)? = nil
 
     if captureStderr {
       stderrPipe = try FileDescriptor.pipe()
