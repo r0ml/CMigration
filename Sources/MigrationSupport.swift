@@ -19,6 +19,7 @@
 
 @_exported import SystemPackage
 
+import locale_h
 import Darwin
 
 public struct CmdErr : Error {
@@ -42,6 +43,8 @@ public protocol ShellCommand {
 extension ShellCommand {
 
   public static func main() async {
+    // set up the locale for commands
+    setlocale(LC_ALL, "")
     let z = await Self().main()
     exit(z)
   }
