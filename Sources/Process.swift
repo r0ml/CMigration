@@ -29,12 +29,18 @@ public func getenv() -> [String:String] {
   return env
 }
 
-public func setenv(_ name : String, value: String) {
-  Darwin.setenv(name, value, 1)
+public func setenv(_ name : String, _ value: String) throws(POSIXErrno) {
+  let k = Darwin.setenv(name, value, 1)
+  if k == -1 {
+    throw POSIXErrno()
+  }
 }
 
-public func unsetenv(_ name : String) {
-  Darwin.unsetenv(name)
+public func unsetenv(_ name : String) throws(POSIXErrno) {
+  let k = Darwin.unsetenv(name)
+  if k == -1 {
+    throw POSIXErrno()
+  }
 }
 
 
