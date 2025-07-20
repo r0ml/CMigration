@@ -43,6 +43,10 @@ public func unsetenv(_ name : String) throws(POSIXErrno) {
   }
 }
 
+public var progname : String {
+  let k = String(cString: getprogname())
+  return k
+}
 
 
 public struct ProcessResult {
