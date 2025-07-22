@@ -529,3 +529,6 @@ public func getPasswd(of userid: Int) -> Passwd? {
   )
   return p
 }
+
+public var userId : Int { Int(getuid()) }
+public var userName : String { String(cString: getlogin()) }
