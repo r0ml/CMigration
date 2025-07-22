@@ -492,3 +492,22 @@ public func homeDirectory(for username: String) -> String? {
     return String(cString: pwd.pw_dir)
   }
 }
+
+/** Get UID from username.  */
+public func uid(for username: String) -> Int? {
+    // Convert Swift string to C string
+  username.withPlatformString { cUsername in
+    var pwd = passwd()
+    var result: UnsafeMutablePointer<passwd>? = nil
+    let bufSize = sysconf(_SC_GETPW_R_SIZE_MAX)
+    let buffer = UnsafeMutablePointer<Int8>.allocate(capacity: Int(bufSize))
+    defer { buffer.deallocate() }
+
+    let error = getpwnam_r(cUsername, &pwd, buffer, bufSize, &result)
+    guard error == 0, result != nil else {
+      return nil // user not found
+    }
+
+    return Int(pwd.pw_uid)
+  }
+}
