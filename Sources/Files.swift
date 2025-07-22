@@ -532,3 +532,70 @@ public func getPasswd(of userid: Int) -> Passwd? {
 
 public var userId : Int { Int(getuid()) }
 public var userName : String { String(cString: getlogin()) }
+public var groupId : Int { Int(getgid()) }
+public var effectiveUserId : Int { Int(geteuid()) }
+public var effectiveGroupId : Int { Int(getegid()) }
+
+public struct GroupEntry {
+  public var name : String
+  public var groupId : Int
+  public var members : [String]
+}
+
+public func getGroupEntry(of groupId: Int) -> GroupEntry? {
+  // Convert Swift string to C string
+  var gr = group()
+  var result: UnsafeMutablePointer<group>? = nil
+  let bufSize = sysconf(_SC_GETGR_R_SIZE_MAX)
+  let buffer = UnsafeMutablePointer<Int8>.allocate(capacity: Int(bufSize))
+  defer { buffer.deallocate() }
+
+  let error = getgrgid_r(gid_t(groupId), &gr, buffer, bufSize, &result)
+  guard error == 0, result != nil else {
+    return nil // user not found
+  }
+
+  var members: [String] = []
+     var memberPtr = gr.gr_mem
+
+     while let ptr = memberPtr?.pointee {
+         members.append(String(cString: ptr))
+         memberPtr = memberPtr?.advanced(by: 1)
+     }
+
+  let p = GroupEntry(name: String(cString: gr.gr_name),
+                     groupId: Int(gr.gr_gid),
+                     members: members
+  )
+  return p
+}
+
+public func getGroupEntry(for groupname: String) -> GroupEntry? {
+    // Convert Swift string to C string
+  return groupname.withPlatformString { cGroupname -> GroupEntry? in
+    var gr = group()
+    var result: UnsafeMutablePointer<group>? = nil
+    let bufSize = sysconf(_SC_GETGR_R_SIZE_MAX)
+    let buffer = UnsafeMutablePointer<Int8>.allocate(capacity: Int(bufSize))
+    defer { buffer.deallocate() }
+
+    let error = getgrnam_r(cGroupname, &gr, buffer, bufSize, &result)
+    guard error == 0, result != nil else {
+      return nil // group not found
+    }
+
+    var members: [String] = []
+       var memberPtr = gr.gr_mem
+
+       while let ptr = memberPtr?.pointee {
+           members.append(String(cString: ptr))
+           memberPtr = memberPtr?.advanced(by: 1)
+       }
+
+    let p = GroupEntry(name: String(cString: gr.gr_name),
+                   groupId: Int(gr.gr_gid),
+                       members: members
+    )
+    return p
+  }
+}
