@@ -602,3 +602,6 @@ public func getGroupEntry(for groupname: String) -> GroupEntry? {
     return p
   }
 }
+
+public let _PATH_TTY = "/dev/tty"
+public let _PATH_DEVNULL = "/dev/null"
