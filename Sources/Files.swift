@@ -706,7 +706,7 @@ public func isThere(candidate: String) -> Bool {
 public func searchPath(for filename: String) -> String? {
   var candidate = ""
 
-  let path = Environment.getenv("PATH") ?? _PATH_DEFPATH //   "/usr/bin:/bin"
+  let path = Environment["PATH"] ?? _PATH_DEFPATH //   "/usr/bin:/bin"
 
   if filename.contains("/") {
     return filename

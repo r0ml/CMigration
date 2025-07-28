@@ -4,7 +4,7 @@
 import Darwin
 
 public func getShell() -> String {
-  let tmpShell = Environment.getenv("SHELL")
+  let tmpShell = Environment["SHELL"]
   return tmpShell ?? _PATH_BSHELL
 }
 
