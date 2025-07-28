@@ -6,7 +6,16 @@ import Darwin
 
 public struct Environment {
   /// Return the value of the environment variable given as argument.  Return `nil` if the environment variable is not set
-  public static func getenv(_ name: String) -> String? {
+/*  public static func getenv(_ name: String) -> String? {
+    if let a = Darwin.getenv(name) {
+      return String(cString: a)
+    } else {
+      return nil
+    }
+  }
+*/
+  
+  public static subscript(_ name : String) -> String? {
     if let a = Darwin.getenv(name) {
       return String(cString: a)
     } else {
