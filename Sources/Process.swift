@@ -16,10 +16,11 @@ public struct Environment {
 */
   
   public static subscript(_ name : String) -> String? {
-    if let a = Darwin.getenv(name) {
+    get {if let a = Darwin.getenv(name) {
       return String(cString: a)
     } else {
       return nil
+    }
     }
   }
 
@@ -42,6 +43,7 @@ public struct Environment {
   }
 
   /// Set the environment variable specified by @arg name to the value specified by @arg value.`
+  /// A subscript `set` specifier cannot throw -- so I need a separate function
   public static func setenv(_ name : String, _ value: String) throws(POSIXErrno) {
     let k = Darwin.setenv(name, value, 1)
     if k == -1 {
