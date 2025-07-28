@@ -28,18 +28,6 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-
-// FIXME: do the swift-system version of this
-/*
-extension FileDescriptor.AsyncBytes {
-  /// Asynchronously reads lines from the `AsyncBytes` stream.
-  public var linesNLX : AsyncLineSequenceX<FileHandle.AsyncBytes> {
-    return AsyncLineSequenceX(self)
-  }
-  
-}
-*/
-
 import Darwin
 @_exported import errno_h
 
@@ -603,5 +591,166 @@ public func getGroupEntry(for groupname: String) -> GroupEntry? {
   }
 }
 
+
+public enum DeviceType {
+}
+
+public struct FileFlags: OptionSet, Sendable {
+    public let rawValue: UInt32
+
+    public init(rawValue: UInt32) { self.rawValue = rawValue }
+    public init() { self.rawValue = 0 }
+
+    // Example flag values (if you have real flag values, replace or add)
+    public static let none = FileFlags([])
+    public static let someFlag = FileFlags(rawValue: 1 << 0)
+    // Add more specific flags as needed.
+}
+
+public struct DateTime {
+  var nanosecs : UInt
+}
+
+public struct FileMetadata {
+  var device : UInt               // device inode resides on
+  var inode : UInt                // inode's number
+  var mode : FilePermissions      // inode protection mode
+  var links : UInt                // number of hard links to the file
+  var userId : UInt               // user-id of owner
+  var groupId : UInt              // group-id of owner
+  var rawDevice : UInt            // device for special file inode
+  var created : DateTime          // creation time
+  var lastAccess : DateTime       // time of last access
+  var lastWrite : DateTime        // time of last data modification
+  var lastModification : DateTime // time of last file status change
+  var size : UInt                 // file size, in bytes
+  var blocks : UInt               // blocks allocated for file
+  var blockSize : UInt            // optimal file sys I/O ops blocksize
+  var flags : FileFlags           // user defined flags for file
+  var generation : UInt           // file generation number
+
+  public init(for f: String) throws(POSIXErrno) {
+    var statbuf = Darwin.stat()
+    let e = stat(f, &statbuf)
+    try self.init(e, statbuf)
+  }
+
+  public init(for f: FileDescriptor) throws(POSIXErrno) {
+    var statbuf = Darwin.stat()
+    let e = fstat(f.rawValue, &statbuf)
+    try self.init(e, statbuf)
+  }
+
+  private init(_ e : Int32, _ statbuf : stat) throws(POSIXErrno) {
+    if e != 0 {
+      throw POSIXErrno(e)
+    }
+    device = UInt(statbuf.st_dev)
+    inode = UInt(statbuf.st_ino)
+    mode = FilePermissions(rawValue: statbuf.st_mode)
+    links = UInt(statbuf.st_nlink)
+    rawDevice = UInt(statbuf.st_rdev)
+    userId = UInt(statbuf.st_uid)
+    groupId = UInt(statbuf.st_gid)
+    created  = DateTime.init(nanosecs: UInt(statbuf.st_birthtimespec.tv_nsec))
+    lastAccess = DateTime(nanosecs: UInt(statbuf.st_atimespec.tv_nsec))
+    lastWrite = DateTime(nanosecs: UInt(statbuf.st_mtimespec.tv_nsec))
+    lastModification = DateTime(nanosecs: UInt(statbuf.st_ctimespec.tv_nsec))
+    size = UInt(statbuf.st_size)
+    blocks = UInt(statbuf.st_blocks)
+    blockSize = UInt(statbuf.st_blksize)
+    flags = FileFlags(rawValue: statbuf.st_flags)
+    generation = UInt(statbuf.st_gen)
+  }
+}
+
+
 public let _PATH_TTY = "/dev/tty"
 public let _PATH_DEVNULL = "/dev/null"
+
+public enum AccessType : Int32 {
+  case read = 4
+  case write = 2
+  case execute = 1
+  case exist = 0
+}
+
+public func haveAccess(_ path: String, _ at : AccessType) throws(POSIXErrno) {
+  let j = access(path, at.rawValue )
+  if j == 0 { return }
+  throw POSIXErrno()
+}
+
+
+// ============================
+
+public func S_ISREG(_ m : mode_t) -> Bool {
+  return (m & S_IFMT) == S_IFREG
+}
+public func S_ISDIR(_ m : mode_t) -> Bool {
+  return (m & S_IFMT) == S_IFDIR     /* directory */
+}
+
+public func S_ISCHR(_ m : mode_t) -> Bool {
+  return (m & S_IFMT) == S_IFCHR     /* char special */
+}
+
+
+public func isThere(candidate: String) -> Bool {
+  var fin = stat()
+
+  return access(candidate, X_OK) == 0 && stat(candidate, &fin) == 0 && S_ISREG(fin.st_mode) && (getuid() != 0 || (fin.st_mode & (S_IXUSR | S_IXGRP | S_IXOTH)) != 0)
+}
+
+/// Find the executable in the path
+public func searchPath(for filename: String) -> String? {
+  var candidate = ""
+
+  let path = Environment.getenv("PATH") ?? _PATH_DEFPATH //   "/usr/bin:/bin"
+
+  if filename.contains("/") {
+    return filename
+  }
+
+  for dx in path.split(separator: ":") {
+    let d = dx.isEmpty ? "." : dx
+    candidate = "\(d)/\(filename)"
+    if candidate.count >= PATH_MAX {
+      continue
+    }
+    if isThere(candidate: candidate) {
+      return candidate
+    }
+  }
+  return nil
+}
+
+
+extension UnsafeMutablePointer<stat> {
+ public var st_ctime : Int { pointee.st_ctimespec.tv_sec }
+ public var st_mtime : Int { pointee.st_mtimespec.tv_sec }
+ public var st_atime : Int { pointee.st_atimespec.tv_sec }
+ public var st_birthtime : Int { pointee.st_birthtimespec.tv_sec }
+
+ public var st_ctim : timespec { pointee.st_ctimespec }
+ public var st_mtim : timespec { pointee.st_mtimespec }
+ public var st_atim : timespec { pointee.st_atimespec }
+ public var st_birthtim : timespec { pointee.st_birthtimespec }
+}
+
+extension stat {
+  public var st_ctime : Int { st_ctimespec.tv_sec }
+  public var st_mtime : Int { st_mtimespec.tv_sec }
+  public var st_atime : Int { st_atimespec.tv_sec }
+  public var st_birthtime : Int { st_birthtimespec.tv_sec }
+
+ public var st_ctim : timespec { st_ctimespec }
+ public var st_mtim : timespec { st_mtimespec }
+ public var st_atim : timespec { st_atimespec }
+ public var st_birthtim : timespec { st_birthtimespec }
+}
+
+enum StringEncodingError : Error {
+  case invalidCharacter
+}
+

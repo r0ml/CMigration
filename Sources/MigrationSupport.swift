@@ -72,18 +72,6 @@ extension ShellCommand {
 
 }
 
-// this is a bug for ARM, but works on Intel
-/*
-func err_s(_ a : Int, b : String, c : String) {
-  fputs(b, stderr)
-  c.withCString { m in
-    withVaList([m]) {
-      verr(Int32(a), b, $0)
-    }
-  }
-}
-*/
-
 public func errx(_ a : Int, _ b : String) {
   fputs(basename(CommandLine.unsafeArgv[0]), stderr)
   fputs(": \(b)\n", stderr)
@@ -154,78 +142,5 @@ public func WIFEXITED(_ x : Int32) -> Bool { return (x & 0x7f) == 0 }
 public func WIFSIGNALED(_ x : Int32) -> Bool {
   let y = x & 0x7f
   return y != _WSTOPPED && y != 0
-}
-
-// ============================
-
-// Find the executable in the path
-
-public func S_ISREG(_ m : mode_t) -> Bool {
-  return (m & S_IFMT) == S_IFREG
-}
-public func S_ISDIR(_ m : mode_t) -> Bool {
-  return (m & S_IFMT) == S_IFDIR     /* directory */
-}
-
-public func S_ISCHR(_ m : mode_t) -> Bool {
-  return (m & S_IFMT) == S_IFCHR     /* char special */
-}
-
-
-public func isThere(candidate: String) -> Bool {
-  var fin = stat()
-  
-  return access(candidate, X_OK) == 0 && stat(candidate, &fin) == 0 && S_ISREG(fin.st_mode) && (getuid() != 0 || (fin.st_mode & (S_IXUSR | S_IXGRP | S_IXOTH)) != 0)
-}
-
-public func searchPath(for filename: String) -> String? {
-  var candidate = ""
-  
-  let path = getenv("PATH") ?? _PATH_DEFPATH //   "/usr/bin:/bin"
-  
-  if filename.contains("/") {
-    return filename
-  }
-  
-  for dx in path.split(separator: ":") {
-    let d = dx.isEmpty ? "." : dx
-    candidate = "\(d)/\(filename)"
-    if candidate.count >= PATH_MAX {
-      continue
-    }
-    if isThere(candidate: candidate) {
-      return candidate
-    }
-  }
-  return nil
-}
-
-
-extension UnsafeMutablePointer<stat> {
- public var st_ctime : Int { pointee.st_ctimespec.tv_sec }
- public var st_mtime : Int { pointee.st_mtimespec.tv_sec }
- public var st_atime : Int { pointee.st_atimespec.tv_sec }
- public var st_birthtime : Int { pointee.st_birthtimespec.tv_sec }
-    
- public var st_ctim : timespec { pointee.st_ctimespec }
- public var st_mtim : timespec { pointee.st_mtimespec }
- public var st_atim : timespec { pointee.st_atimespec }
- public var st_birthtim : timespec { pointee.st_birthtimespec }
-}
-
-extension stat {
-  public var st_ctime : Int { st_ctimespec.tv_sec }
-  public var st_mtime : Int { st_mtimespec.tv_sec }
-  public var st_atime : Int { st_atimespec.tv_sec }
-  public var st_birthtime : Int { st_birthtimespec.tv_sec }
-  
- public var st_ctim : timespec { st_ctimespec }
- public var st_mtim : timespec { st_mtimespec }
- public var st_atim : timespec { st_atimespec }
- public var st_birthtim : timespec { st_birthtimespec }
-}
-
-enum StringEncodingError : Error {
-  case invalidCharacter
 }
 

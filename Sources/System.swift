@@ -4,10 +4,12 @@
 import Darwin
 
 public func getShell() -> String {
-  let tmpShell = getenv("SHELL")
-  return tmpShell ?? Darwin._PATH_BSHELL
+  let tmpShell = Environment.getenv("SHELL")
+  return tmpShell ?? _PATH_BSHELL
 }
 
-public var scArgMax : Int {
-  return Darwin.sysconf(Darwin._SC_ARG_MAX)
+public struct Sysconf {
+  public static var scArgMax : Int {
+    return Darwin.sysconf(Darwin._SC_ARG_MAX)
+  }
 }

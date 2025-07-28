@@ -4,56 +4,66 @@
 import SystemPackage
 import Darwin
 
-public func getenv(_ name: String) -> String? {
-  if let a = Darwin.getenv(name) {
-    return String(cString: a)
-  } else {
-    return nil
-  }
-}
-
-public func getenv() -> [String:String] {
-  var env = [String: String]()
-  
-  var ptr = environ
-  while let current = ptr.pointee {
-    if let entry = String(validatingCString: current) {
-      if let equalIndex = entry.firstIndex(of: "=") {
-        let key = String(entry[..<equalIndex])
-        let value = String(entry[entry.index(after: equalIndex)...])
-        env[key] = value
-      }
+public struct Environment {
+  /// Return the value of the environment variable given as argument.  Return `nil` if the environment variable is not set
+  public static func getenv(_ name: String) -> String? {
+    if let a = Darwin.getenv(name) {
+      return String(cString: a)
+    } else {
+      return nil
     }
-    ptr = ptr.advanced(by: 1)
   }
-  return env
-}
 
-public func setenv(_ name : String, _ value: String) throws(POSIXErrno) {
-  let k = Darwin.setenv(name, value, 1)
-  if k == -1 {
-    throw POSIXErrno()
+  /// Return  a dictionary mapping environment variable names to values
+  public static func getenv() -> [String:String] {
+    var env = [String: String]()
+
+    var ptr = environ
+    while let current = ptr.pointee {
+      if let entry = String(validatingCString: current) {
+        if let equalIndex = entry.firstIndex(of: "=") {
+          let key = String(entry[..<equalIndex])
+          let value = String(entry[entry.index(after: equalIndex)...])
+          env[key] = value
+        }
+      }
+      ptr = ptr.advanced(by: 1)
+    }
+    return env
+  }
+
+  /// Set the environment variable specified by @arg name to the value specified by @arg value.`
+  public static func setenv(_ name : String, _ value: String) throws(POSIXErrno) {
+    let k = Darwin.setenv(name, value, 1)
+    if k == -1 {
+      throw POSIXErrno()
+    }
+  }
+
+  /// Unset the environment variable @arg name
+  public static func unsetenv(_ name : String) throws(POSIXErrno) {
+    let k = Darwin.unsetenv(name)
+    if k == -1 {
+      throw POSIXErrno()
+    }
+  }
+
+  /// Return the name of the currently executing command
+  public static var progname : String {
+    let k = String(cString: getprogname())
+    return k
   }
 }
 
-public func unsetenv(_ name : String) throws(POSIXErrno) {
-  let k = Darwin.unsetenv(name)
-  if k == -1 {
-    throw POSIXErrno()
-  }
-}
-
-public var progname : String {
-  let k = String(cString: getprogname())
-  return k
-}
-
-
+/// Running a sub process (using `ProcessRunner` will return the contents of standard output and standard error wrapped in this struct
 public struct ProcessResult {
     public let stdout: String
     public let stderr: String
 }
 
+/// Running a subprocess (using `ProcessRunner` will throw a ProcessError if
+/// a) the subprocess fails to run (`spawnFailed`) or
+/// b) the subprocess runs and terminates with a non-zero exit status (`nonZeroExit`)
 public enum ProcessError: Error, CustomStringConvertible {
     case nonZeroExit(code: Int32, stdout: String, stderr: String)
     case spawnFailed(errno: Int32)
@@ -68,6 +78,7 @@ public enum ProcessError: Error, CustomStringConvertible {
     }
 }
 
+/*
 public struct ProcessRunner {
   public static func run(command: String, arguments: [String],
                          currentDirectory : String? = nil,
@@ -190,6 +201,8 @@ public struct ProcessRunner {
     }
 }
 
+ */
+
 /**
  example usage:
  
@@ -202,14 +215,15 @@ public struct ProcessRunner {
  }
  */
 
-
+/// THis protocol identifies the classes which can be passed as standard input to `ProcessRunner`
 public protocol Stdinable : Sendable {}
 extension String : Stdinable {}
 extension FileDescriptor : Stdinable {}
 extension AsyncStream<UInt8> : Stdinable {}
 extension [UInt8] : Stdinable {}
 
-public struct ProcessRunner2 {
+/// This struct is used to spawn a subprocess and run it.
+public struct ProcessRunner {
   var command : String
   var arguments: [String]
   var environment : [String : String]?
@@ -233,84 +247,84 @@ public struct ProcessRunner2 {
         stdinPipe = try FileDescriptor.pipe()
       }
 
-    var stdoutPipe : (readEnd: FileDescriptor, writeEnd: FileDescriptor)? = nil
+      var stdoutPipe : (readEnd: FileDescriptor, writeEnd: FileDescriptor)? = nil
 
-    if captureStdout {
-      stdoutPipe = try FileDescriptor.pipe()
-    }
+      if captureStdout {
+        stdoutPipe = try FileDescriptor.pipe()
+      }
 
-    var stderrPipe : (readEnd: FileDescriptor, writeEnd: FileDescriptor)? = nil
+      var stderrPipe : (readEnd: FileDescriptor, writeEnd: FileDescriptor)? = nil
 
-    if captureStderr {
-      stderrPipe = try FileDescriptor.pipe()
-    }
+      if captureStderr {
+        stderrPipe = try FileDescriptor.pipe()
+      }
 
-        defer {
-            try? stdoutPipe?.readEnd.close()
-            try? stdoutPipe?.writeEnd.close()
-            try? stderrPipe?.readEnd.close()
-            try? stderrPipe?.writeEnd.close()
-        }
+      defer {
+        try? stdoutPipe?.readEnd.close()
+        try? stdoutPipe?.writeEnd.close()
+        try? stderrPipe?.readEnd.close()
+        try? stderrPipe?.writeEnd.close()
+      }
 
-        var fileActions: posix_spawn_file_actions_t?
-        posix_spawn_file_actions_init(&fileActions)
+      var fileActions: posix_spawn_file_actions_t?
+      posix_spawn_file_actions_init(&fileActions)
 
       if let cwd = currentDirectory {
         // FIXME: not available on iOS
-          posix_spawn_file_actions_addchdir_np(&fileActions, cwd)
+        posix_spawn_file_actions_addchdir_np(&fileActions, cwd)
       }
 
 
       posix_spawn_file_actions_adddup2(&fileActions, stdinPipe!.writeEnd.rawValue, STDIN_FILENO)
 
-        // Redirect stdout and stderr
-    if captureStdout {
-      posix_spawn_file_actions_adddup2(&fileActions, stdoutPipe!.writeEnd.rawValue, STDOUT_FILENO)
-      posix_spawn_file_actions_addclose(&fileActions, stdoutPipe!.readEnd.rawValue)
-    }
-
-    if captureStderr {
-      posix_spawn_file_actions_adddup2(&fileActions, stderrPipe!.writeEnd.rawValue, STDERR_FILENO)
-      posix_spawn_file_actions_addclose(&fileActions, stderrPipe!.readEnd.rawValue)
-    }
-
-        let argv: [UnsafeMutablePointer<CChar>?] = (arguments).map { strdup($0) } + [nil]
-
-        var pid: pid_t = 0
-
-    var ev = environ
-    if let environment {
-      ev = UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>.allocate(capacity: environment.count + 1)
-      defer { ev.deallocate() }
-      var i = 0
-      for (k, v) in environment {
-        ev[i] = strdup("\(k)=\(v)")
-        i += 1
+      // Redirect stdout and stderr
+      if captureStdout {
+        posix_spawn_file_actions_adddup2(&fileActions, stdoutPipe!.writeEnd.rawValue, STDOUT_FILENO)
+        posix_spawn_file_actions_addclose(&fileActions, stdoutPipe!.readEnd.rawValue)
       }
-      ev[i] = nil
-    }
+
+      if captureStderr {
+        posix_spawn_file_actions_adddup2(&fileActions, stderrPipe!.writeEnd.rawValue, STDERR_FILENO)
+        posix_spawn_file_actions_addclose(&fileActions, stderrPipe!.readEnd.rawValue)
+      }
+
+      let argv: [UnsafeMutablePointer<CChar>?] = (arguments).map { strdup($0) } + [nil]
+
+      var pid: pid_t = 0
+
+      var ev = environ
+      if let environment {
+        ev = UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>.allocate(capacity: environment.count + 1)
+        defer { ev.deallocate() }
+        var i = 0
+        for (k, v) in environment {
+          ev[i] = strdup("\(k)=\(v)")
+          i += 1
+        }
+        ev[i] = nil
+      }
 
       let cc = searchPath(for: command)
 
-        let spawnResult = posix_spawn(&pid, cc, &fileActions, nil, argv, ev)
+      let spawnResult = posix_spawn(&pid, cc, &fileActions, nil, argv, ev)
 
-        for ptr in argv where ptr != nil {
-            free(ptr)
-        }
+      for ptr in argv where ptr != nil {
+        free(ptr)
+      }
 
-        posix_spawn_file_actions_destroy(&fileActions)
+      posix_spawn_file_actions_destroy(&fileActions)
 
-        guard spawnResult == 0 else {
-            throw ProcessError.spawnFailed(errno: spawnResult)
-        }
+      guard spawnResult == 0 else {
+        throw ProcessError.spawnFailed(errno: spawnResult)
+      }
 
-    if let prelaunch { let p = pid; Task { await prelaunch(p) } }
+      if let prelaunch { let p = pid; Task { await prelaunch(p) } }
 
 
 
-        // Close child ends in parent
-    var stdo : String = ""
-    var stde : String = ""
+      // Close child ends in parent
+      var stdo : String = ""
+      var stde : String = ""
 
       if let ii = input {
         let w = stdinPipe!.writeEnd
@@ -338,46 +352,41 @@ public struct ProcessRunner2 {
           }
         }
       }
-    if captureStdout {
-      // Capture stdout
-      try stdoutPipe!.writeEnd.close()
-      stdo = try readAll(from: stdoutPipe!.readEnd)
+      if captureStdout {
+        // Capture stdout
+        try stdoutPipe!.writeEnd.close()
+        stdo = try readAll(from: stdoutPipe!.readEnd)
+      }
+      if captureStderr {
+        try stderrPipe!.writeEnd.close()
+        stde = try readAll(from: stderrPipe!.readEnd)
+      }
+
+      // Wait for child
+      let status = try await waitpidAsync(pid)
+      let exitCode = WIFEXITED(status) ? WEXITSTATUS(status) : -1
+
+      if exitCode != 0 {
+        throw ProcessError.nonZeroExit(code: exitCode, stdout: stdo, stderr: stde)
+      }
+
+      return ProcessResult(stdout: stdo, stderr: stde)
     }
-    if captureStderr {
-      try stderrPipe!.writeEnd.close()
-      stde = try readAll(from: stderrPipe!.readEnd)
+
+  private func readAll(from fd: FileDescriptor) throws -> String {
+    var output = ""
+    var buffer = [UInt8](repeating: 0, count: 4096)
+
+    while true {
+      let bytesRead = try buffer.withUnsafeMutableBytes {
+        try fd.read(into: $0)
+      }
+      if bytesRead == 0 { break }
+      output += String(decoding: buffer[..<bytesRead], as: UTF8.self)
     }
 
-        // Wait for child
-        let status = try await waitpidAsync(pid)
-        let exitCode = WIFEXITED(status) ? WEXITSTATUS(status) : -1
-
-        if exitCode != 0 {
-            throw ProcessError.nonZeroExit(code: exitCode, stdout: stdo, stderr: stde)
-        }
-
-        return ProcessResult(stdout: stdo, stderr: stde)
-    }
-
-  public struct ProcessResult {
-      public let stdout: String
-      public let stderr: String
+    return output
   }
-
-    private func readAll(from fd: FileDescriptor) throws -> String {
-        var output = ""
-        var buffer = [UInt8](repeating: 0, count: 4096)
-
-        while true {
-            let bytesRead = try buffer.withUnsafeMutableBytes {
-                try fd.read(into: $0)
-            }
-            if bytesRead == 0 { break }
-                output += String(decoding: buffer[..<bytesRead], as: UTF8.self)
-        }
-
-        return output
-    }
 
 
 
@@ -387,7 +396,7 @@ public struct ProcessRunner2 {
   ///   - pid: The process ID to wait for.
   ///   - options: POSIX wait options (e.g., WNOHANG, WUNTRACED).
   /// - Returns: The exit status of the child process.
-  func waitpidAsync(_ pid: pid_t, options: CInt = 0) async throws -> CInt {
+  private func waitpidAsync(_ pid: pid_t, options: CInt = 0) async throws -> CInt {
     return try await withCheckedThrowingContinuation { continuation in
       var status: CInt = 0
       let result = waitpid(pid, &status, options)
