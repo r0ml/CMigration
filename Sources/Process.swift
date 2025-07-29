@@ -307,12 +307,13 @@ public struct ProcessRunner {
       if let environment {
         ev = UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>.allocate(capacity: environment.count + 1)
         defer {
-          var i = 0
+ /*         var i = 0
           while let j = ev[i] {
             free(j)
           }
+  */
           ev.deallocate()
-        }
+       }
         var i = 0
         for (k, v) in environment {
           ev[i] = strdup("\(k)=\(v)")
