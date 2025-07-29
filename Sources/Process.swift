@@ -317,14 +317,14 @@ posix_spawn_file_actions_adddup2(&fileActions, (input as! FileDescriptor).rawVal
       var ev = environ
       if let environment {
         ev = UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>.allocate(capacity: environment.count + 1)
-        defer {
+ //       defer {
  /*         var i = 0
           while let j = ev[i] {
             free(j)
           }
   */
-          ev.deallocate()
-       }
+//          ev.deallocate()
+//       }
         var i = 0
         for (k, v) in environment {
           ev[i] = strdup("\(k)=\(v)")
