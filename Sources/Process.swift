@@ -309,7 +309,7 @@ public struct ProcessRunner {
         defer {
           var i = 0
           while let j = ev[i] {
-            j.deallocate()
+            free(j)
           }
           ev.deallocate()
         }
