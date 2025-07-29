@@ -356,18 +356,20 @@ posix_spawn_file_actions_adddup2(&fileActions, (input as! FileDescriptor).rawVal
       var stde : String = ""
 
       if let ii = input {
-        let w = stdinPipe!.writeEnd
         Task.detached {
           switch ii {
             case is [UInt8]:
+              let w = stdinPipe!.writeEnd
               try w.writeAll(ii as! [UInt8])
             case is String:
               var j = ii as! String
+              let w = stdinPipe!.writeEnd
               let n = try j.withUTF8 { bp in
                 try w.writeAll(UnsafeRawBufferPointer(bp) )
               }
             case is AsyncStream<UInt8>:
               var j = ii as! AsyncStream<UInt8>
+              let w = stdinPipe!.writeEnd
               for try await i in j {
                 try w.write([i])
               }
