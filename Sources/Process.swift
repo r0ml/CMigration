@@ -285,8 +285,19 @@ public struct ProcessRunner {
         posix_spawn_file_actions_addchdir_np(&fileActions, cwd)
       }
 
+      // I either want to have stdin be passed through
+      // or stdin is set to the file descriptor for an input file
+      // or stdin is set to the file descriptor for the stdin pipe which will be fed from a String, [UInt8] or AsyncStream<UInt8>
+      switch input {
+        case nil:
+          posix_spawn_file_actions_adddup2(&fileActions,  FileDescriptor.standardInput.rawValue, STDIN_FILENO)
+        case is FileDescriptor:
+posix_spawn_file_actions_adddup2(&fileActions, (input as! FileDescriptor).rawValue, STDIN_FILENO)
+        default:
+          posix_spawn_file_actions_adddup2(&fileActions, stdinPipe!.readEnd.rawValue, STDIN_FILENO)
 
-      posix_spawn_file_actions_adddup2(&fileActions, stdinPipe!.writeEnd.rawValue, STDIN_FILENO)
+      }
+
 
       // Redirect stdout and stderr
       if captureStdout {
@@ -361,10 +372,12 @@ public struct ProcessRunner {
                 try w.write([i])
               }
             case is FileDescriptor:
-              var j = ii as! FileDescriptor
+              break
+/*              var j = ii as! FileDescriptor
               for try await i in j.bytes {
                 try w.write([i])
               }
+ */
             default:
               fatalError("Unsupported input type \(type(of: ii))")
           }
