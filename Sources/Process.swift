@@ -67,7 +67,7 @@ public struct Environment {
 }
 
 /// Running a sub process (using `ProcessRunner` will return the contents of standard output and standard error wrapped in this struct
-public struct ProcessResult {
+public struct ProcessResult : Sendable {
     public let stdout: String
     public let stderr: String
 }
@@ -299,14 +299,20 @@ public struct ProcessRunner {
         posix_spawn_file_actions_addclose(&fileActions, stderrPipe!.readEnd.rawValue)
       }
 
-      let argv: [UnsafeMutablePointer<CChar>?] = (arguments).map { strdup($0) } + [nil]
+      let argv: [UnsafeMutablePointer<CChar>?] = ([command]+arguments).map { strdup($0) } + [nil]
 
       var pid: pid_t = 0
 
       var ev = environ
       if let environment {
         ev = UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>.allocate(capacity: environment.count + 1)
-        defer { ev.deallocate() }
+        defer {
+          var i = 0
+          while let j = ev[i] {
+            j.deallocate()
+          }
+          ev.deallocate()
+        }
         var i = 0
         for (k, v) in environment {
           ev[i] = strdup("\(k)=\(v)")
