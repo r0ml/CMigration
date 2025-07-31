@@ -214,7 +214,7 @@ public struct FtsEntry {
 
   }
 
-  mutating func setAction(_ action: FTSAction) {
+  public mutating func setAction(_ action: FTSAction) {
     if let ff = fts?.fts { fts_set(ff, UnsafeMutablePointer(mutating: self.ent), action.value) }
   }
 }
