@@ -153,21 +153,21 @@ public enum FTSAction {
 public struct FtsEntry {
   var fts : FTSWalker?
   var ent : UnsafePointer<FTSENT>
-  var accpath : String
+  public var accpath : String
 //  var cycle : Int32
   var dev : Int32
   var errno : Int32
   var flags : Int32
-  var ino : UInt64
-  var info : FTSInfo
+  public var ino : UInt64
+  public var info : FTSInfo
   var instr : Int
-  var level : Int
+  public var level : Int
 //  var link : UnsafeMutablePointer<FTSENT>?
-  var name : String!
-  var nlink : Int
+  public var name : String!
+  public var nlink : Int
   var number : Int
 //  var parent : UnsafeMutablePointer<FTSENT>?
-  var path : String
+  public var path : String
 //  var pointer : UnsafeRawPointer?
   var statp : UnsafeMutablePointer<stat>?
   var symfd : Int
