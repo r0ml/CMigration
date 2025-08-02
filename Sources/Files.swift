@@ -640,23 +640,23 @@ public enum FileType {
 }
 
 public struct FileMetadata {
-  var device : UInt               // device inode resides on
-  var inode : UInt                // inode's number
-  var mode : FilePermissions      // inode protection mode
-  var fileType : FileType             // file type
-  var links : UInt                // number of hard links to the file
-  var userId : UInt               // user-id of owner
-  var groupId : UInt              // group-id of owner
-  var rawDevice : UInt            // device for special file inode
-  var created : DateTime          // creation time
-  var lastAccess : DateTime       // time of last access
-  var lastWrite : DateTime        // time of last data modification
-  var lastModification : DateTime // time of last file status change
-  var size : UInt                 // file size, in bytes
-  var blocks : UInt               // blocks allocated for file
-  var blockSize : UInt            // optimal file sys I/O ops blocksize
-  var flags : FileFlags           // user defined flags for file
-  var generation : UInt           // file generation number
+  public var device : UInt               // device inode resides on
+  public var inode : UInt                // inode's number
+  public var mode : FilePermissions      // inode protection mode
+  public var fileType : FileType             // file type
+  public var links : UInt                // number of hard links to the file
+  public var userId : UInt               // user-id of owner
+  public var groupId : UInt              // group-id of owner
+  public var rawDevice : UInt            // device for special file inode
+  public var created : DateTime          // creation time
+  public var lastAccess : DateTime       // time of last access
+  public var lastWrite : DateTime        // time of last data modification
+  public var lastModification : DateTime // time of last file status change
+  public var size : UInt                 // file size, in bytes
+  public var blocks : UInt               // blocks allocated for file
+  public var blockSize : UInt            // optimal file sys I/O ops blocksize
+  public var flags : FileFlags           // user defined flags for file
+  public var generation : UInt           // file generation number
 
   public init(for f: String) throws(POSIXErrno) {
     var statbuf = Darwin.stat()
