@@ -611,10 +611,39 @@ public struct DateTime {
   var nanosecs : UInt
 }
 
+public enum FileType {
+
+  case regular
+  case symbolicLink
+  case socket
+  case blockDevice
+  case whiteOut
+  case directory
+  case characterDevice
+  case fifo
+  case unknown
+
+  public init(rawValue: UInt16) {
+    switch rawValue & S_IFMT {
+      case S_IFREG: self = .regular
+      case S_IFLNK: self = .symbolicLink
+      case S_IFBLK: self = .blockDevice
+      case S_IFSOCK: self = .socket
+      case S_IFWHT: self = .whiteOut
+      case S_IFDIR : self = .directory
+      case S_IFCHR: self = .characterDevice
+      case S_IFIFO: self = .fifo
+      default: self = .unknown
+    }
+  }
+
+}
+
 public struct FileMetadata {
   var device : UInt               // device inode resides on
   var inode : UInt                // inode's number
   var mode : FilePermissions      // inode protection mode
+  var fileType : FileType             // file type
   var links : UInt                // number of hard links to the file
   var userId : UInt               // user-id of owner
   var groupId : UInt              // group-id of owner
@@ -648,6 +677,7 @@ public struct FileMetadata {
     device = UInt(statbuf.st_dev)
     inode = UInt(statbuf.st_ino)
     mode = FilePermissions(rawValue: statbuf.st_mode)
+    fileType = FileType(rawValue: statbuf.st_mode)
     links = UInt(statbuf.st_nlink)
     rawDevice = UInt(statbuf.st_rdev)
     userId = UInt(statbuf.st_uid)
