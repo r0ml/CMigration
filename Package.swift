@@ -24,7 +24,7 @@ import PackageDescription
 let package = Package(
   name: "CMigration",
   // Mutex is only available in v15 or newer
-  platforms: [.macOS(.v15), .iOS(.v16)],
+  platforms: [.macOS(.v15), .iOS(.v18)],
   products: [
     .library(name: "CMigration", targets: ["CMigration"])],
   dependencies: [

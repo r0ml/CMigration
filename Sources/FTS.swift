@@ -156,7 +156,7 @@ public struct FtsEntry {
   public var accpath : String
 //  var cycle : Int32
   var dev : Int32
-  var errno : Int32
+  public var errno : POSIXErrno
   var flags : Int32
   public var ino : UInt64
   public var info : FTSInfo
@@ -169,7 +169,7 @@ public struct FtsEntry {
 //  var parent : UnsafeMutablePointer<FTSENT>?
   public var path : String
 //  var pointer : UnsafeRawPointer?
-  var statp : UnsafeMutablePointer<stat>?
+  public var statp : FileMetadata? // UnsafeMutablePointer<stat>?
   var symfd : Int
 
   init(_ fts : FTSWalker? = nil, _ ff : UnsafePointer<FTSENT>) {
@@ -180,7 +180,7 @@ public struct FtsEntry {
     self.accpath = String(cString: f.fts_accpath)
 //    self.cycle = f.fts_cycle
     self.dev = f.fts_dev
-    self.errno = f.fts_errno
+    self.errno = POSIXErrno(f.fts_errno)
     self.flags = Int32(f.fts_flags)
     self.ino = f.fts_ino
     self.info = FTSInfo(Int(f.fts_info))
@@ -197,7 +197,7 @@ public struct FtsEntry {
     self.path = String(cString: f.fts_path)
 
  //   self.pointer = f.fts_pointer
-    self.statp = f.fts_statp
+    self.statp = FileMetadata(from: f.fts_statp)
     self.symfd = Int(f.fts_symfd)
 
     // AAARGH!  The definition of FTSENT (entry) defines the file name as a char[1] -- when in reality,
