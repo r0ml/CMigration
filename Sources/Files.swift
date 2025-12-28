@@ -31,6 +31,26 @@
 import Darwin
 @_exported import errno_h
 
+
+
+extension FilePath {
+  public func isRegularFile() throws -> Bool {
+    let statBuf = try FileMetadata(for: self.string)
+    return statBuf.fileType == .regular
+  }
+}
+
+extension FileDescriptor {
+  public var isRegularFile : Bool {
+    var sbp = stat()
+    if fstat(self.rawValue, &sbp) != 0 {
+      return false
+    }
+    return (sbp.st_mode & S_IFMT) == S_IFREG
+  }
+}
+
+
 extension FileDescriptor {
   public var bytes : AsyncByteStream { get  { AsyncByteStream(fd: self) } }
   public var characters : AsyncCharacterReader { get { AsyncCharacterReader(fd: self) } }
