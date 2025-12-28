@@ -690,6 +690,15 @@ public struct FileMetadata {
     try self.init(e, statbuf)
   }
 
+  public init?(from: UnsafePointer<stat>?) {
+    guard from != nil else { return nil }
+    do {
+      try self.init(0, from!.pointee)
+    } catch {
+      fatalError("doesn't throw with errno 0")
+    }
+  }
+  
   private init(_ e : Int32, _ statbuf : stat) throws(POSIXErrno) {
     if e != 0 {
       throw POSIXErrno(e)
