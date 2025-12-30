@@ -1,12 +1,12 @@
 // Copyright (c) 1868 Charles Babbage
 // Modernized by Robert "r0ml" Lefkowitz <code@liberally.net> in 2025
 
-enum ExpandNumberError: Error {
+public enum ExpandNumberError: Error {
     case invalidFormat
     case overflow
 }
 
-func expand_number(_ input: String) throws -> UInt64 {
+public func expand_number(_ input: String) throws -> UInt64 {
     let suffixMultipliers: [Character: UInt64] = [
         "B": 1,         // Bytes
         "K": 1024,      // Kilobytes
