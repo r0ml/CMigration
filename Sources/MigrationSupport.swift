@@ -79,11 +79,13 @@ public func errx(_ a : Int, _ b : String) {
 }
 
 public func err(_ a : Int, _ b : String?) {
+  let c = basename(CommandLine.unsafeArgv[0])
+  let cc = c == nil ? "" : "\(String(cString: c!)): "
   let e = String(cString: strerror(errno))
   if let b {
-    fputs("\(b): \(e)\n", stderr)
+    fputs("\(cc)\(b): \(e)\n", stderr)
   } else {
-    fputs("\(e)\n", stderr)
+    fputs("\(cc)\(e)\n", stderr)
   }
   exit(Int32(a))
 }
