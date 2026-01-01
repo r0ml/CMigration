@@ -636,7 +636,7 @@ public struct DateTime {
     nanosecs = t.tv_nsec
   }
 
-  var timeInterval : Double {
+  public var timeInterval : Double {
     Double(secs) + Double(nanosecs) / 1_000_000_000
   }
 
