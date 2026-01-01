@@ -35,22 +35,26 @@ public struct CmdErr : Error {
 public protocol ShellCommand {
   associatedtype CommandOptions
   func parseOptions() async throws(CmdErr) -> CommandOptions
-  func runCommand(_ options : CommandOptions) async throws(CmdErr)
+  func runCommand() async throws(CmdErr)
   var usage : String { get }
+  var options : CommandOptions! { get set }
   init()
 }
 
-extension ShellCommand {
+public extension ShellCommand {
 
-  public static func main() async {
+  /// the static main to create an instance of the ShellCommand and invoke the instance main method
+  static func main() async {
     // set up the locale for commands
     setlocale(LC_ALL, "")
-    let z = await Self().main()
+    var m = Self()
+    let z = await m.main()
     exit(z)
   }
-  
-  public func main() async -> Int32 {
-    var options : CommandOptions
+
+  /// the main function on an instance of the command so that it can access instance variables
+  /// returns the exit code for the command
+  mutating func main() async -> Int32 {
     do {
       options = try await parseOptions()
     } catch(let e) {
@@ -61,15 +65,19 @@ extension ShellCommand {
     }
     
     do {
-      try await runCommand(options)
+      try await runCommand()
       return 0
     } catch(let e) {
       var fh = FileDescriptor.standardError
-      if (!e.message.isEmpty) { print("\(String(cString: getprogname()!)): \(e.message)", to: &fh) }
+      if (!e.message.isEmpty) { print("\(programName): \(e.message)", to: &fh) }
       return Int32(e.code)
     }
   }
 
+  /// the program name (for error messages)
+  var programName : String {
+    String(cString: getprogname()!)
+  }
 }
 
 public func errx(_ a : Int, _ b : String) {
@@ -107,37 +115,20 @@ public func warnc(_ cod : Int32, _ b : String) {
   fputs(": \(b): \(e)\n", stderr)
 }
 
+/// get a Character from a byte whether the representation is signed or unsigned
 extension Character {
+  /// get a Character from a byte
   public static func from(_ c : Int8?) -> Character? {
     guard let c else { return nil }
     return Character(UnicodeScalar(UInt8(c)))
   }
 
+  /// get a Character from a byte
   public static func from(_ c : UInt8?) -> Character? {
     guard let c else { return nil }
     return Character(UnicodeScalar(c))
   }
 }
-
-/*
-#if swift(>=6.0)
-
- extension FileHandle: @retroactive TextOutputStream {
-    public func write(_ string: String) {
-      let data = Data(string.utf8)
-      self.write(data)
-    }
-  }
-#else
-  extension FileHandle: TextOutputStream {
-    public func write(_ string: String) {
-      let data = Data(string.utf8)
-      self.write(data)
-    }
-  }
-#endif
-*/
-
 
 public func WEXITSTATUS(_ x : Int32) -> Int32 { return (x >> 8) & 0x0ff }
 public func WIFEXITED(_ x : Int32) -> Bool { return (x & 0x7f) == 0 }
