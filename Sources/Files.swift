@@ -628,7 +628,7 @@ public struct FileFlags: OptionSet, Sendable {
 }
 
 public struct DateTime {
-  var nanosecs : UInt
+  public var nanosecs : UInt
 }
 
 public enum FileType {
