@@ -59,11 +59,13 @@ public struct Environment {
     }
   }
 
+  /*
   /// Return the name of the currently executing command
   public static var progname : String {
     let k = String(cString: getprogname())
     return k
   }
+   */
 }
 
 /// Running a sub process (using `ProcessRunner` will return the contents of standard output and standard error wrapped in this struct
