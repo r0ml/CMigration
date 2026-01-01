@@ -37,7 +37,7 @@ public protocol ShellCommand {
   func parseOptions() async throws(CmdErr) -> CommandOptions
   func runCommand() async throws(CmdErr)
   var usage : String { get }
-  var options : CommandOptions! { get set }
+  var options : CommandOptions { get set }
   init()
 }
 
