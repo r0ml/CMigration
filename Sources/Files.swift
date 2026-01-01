@@ -628,7 +628,18 @@ public struct FileFlags: OptionSet, Sendable {
 }
 
 public struct DateTime {
-  public var nanosecs : UInt
+  public var secs : Int
+  public var nanosecs : Int
+
+  init(_ t : timespec) {
+    secs = t.tv_sec
+    nanosecs = t.tv_nsec
+  }
+
+  var timeInterval : Double {
+    Double(secs) + Double(nanosecs) / 1_000_000_000
+  }
+
 }
 
 public enum FileType {
@@ -711,10 +722,10 @@ public struct FileMetadata {
     rawDevice = UInt(statbuf.st_rdev)
     userId = UInt(statbuf.st_uid)
     groupId = UInt(statbuf.st_gid)
-    created  = DateTime.init(nanosecs: UInt(statbuf.st_birthtimespec.tv_nsec))
-    lastAccess = DateTime(nanosecs: UInt(statbuf.st_atimespec.tv_nsec))
-    lastWrite = DateTime(nanosecs: UInt(statbuf.st_mtimespec.tv_nsec))
-    lastModification = DateTime(nanosecs: UInt(statbuf.st_ctimespec.tv_nsec))
+    created  = DateTime.init(statbuf.st_birthtimespec)
+    lastAccess = DateTime(statbuf.st_atimespec.tv_nsec)
+    lastWrite = DateTime(statbuf.st_mtimespec.tv_nsec)
+    lastModification = DateTime(statbuf.st_ctimespec.tv_nsec)
     size = UInt(statbuf.st_size)
     blocks = UInt(statbuf.st_blocks)
     blockSize = UInt(statbuf.st_blksize)
