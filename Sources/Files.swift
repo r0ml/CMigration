@@ -58,56 +58,56 @@ extension FileDescriptor {
   public init(forReading: String) throws {
     self = try Self.open(forReading, .readOnly)
   }
-  
+
   public init(forWriting: String) throws {
     self = try Self.open(forWriting, .writeOnly)
   }
-  
+
   public init(forUpdating: String) throws {
     self = try Self.open(forUpdating, .readWrite)
   }
 
-  
+
 }
 
 public struct AsyncByteStream: AsyncSequence {
-    public typealias Element = UInt8
-    let fd: FileDescriptor
-    let bufferSize: Int = 4096
+  public typealias Element = UInt8
+  let fd: FileDescriptor
+  let bufferSize: Int = 4096
 
   public var lines : AsyncLineReader { get { AsyncLineReader(byteStream: self) } }
   public func lines(_ withEOL : Bool = false, encoding: any Unicode.Encoding.Type = UTF8.self) -> AsyncLineReader {
     return AsyncLineReader(byteStream: self, retEOL:  withEOL, encoding: encoding)
   }
-//  public var linesNLX : AsyncLineSequenceX { get { AsyncLineSequenceX(base: self) } }
-  
-    public struct AsyncIterator: AsyncIteratorProtocol {
-        let fd: FileDescriptor
-        var buffer = [UInt8]()
-        var index = 0
-        let bufferSize: Int
+  //  public var linesNLX : AsyncLineSequenceX { get { AsyncLineSequenceX(base: self) } }
 
-        public mutating func next() async throws -> UInt8? {
-            if index >= buffer.count {
-                var temp = [UInt8](repeating: 0, count: bufferSize)
-                let bytesRead = try temp.withUnsafeMutableBytes {
-                    try fd.read(into: $0)
-                }
+  public struct AsyncIterator: AsyncIteratorProtocol {
+    let fd: FileDescriptor
+    var buffer = [UInt8]()
+    var index = 0
+    let bufferSize: Int
 
-                guard bytesRead > 0 else { return nil }
-                buffer = Array(temp.prefix(bytesRead))
-                index = 0
-            }
-
-            let byte = buffer[index]
-            index += 1
-            return byte
+    public mutating func next() async throws -> UInt8? {
+      if index >= buffer.count {
+        var temp = [UInt8](repeating: 0, count: bufferSize)
+        let bytesRead = try temp.withUnsafeMutableBytes {
+          try fd.read(into: $0)
         }
-    }
 
-    public func makeAsyncIterator() -> AsyncIterator {
-        AsyncIterator(fd: fd, bufferSize: bufferSize)
+        guard bytesRead > 0 else { return nil }
+        buffer = Array(temp.prefix(bytesRead))
+        index = 0
+      }
+
+      let byte = buffer[index]
+      index += 1
+      return byte
     }
+  }
+
+  public func makeAsyncIterator() -> AsyncIterator {
+    AsyncIterator(fd: fd, bufferSize: bufferSize)
+  }
 }
 
 
@@ -120,110 +120,110 @@ public struct AsyncByteStream: AsyncSequence {
 ///     - supporting different line endings
 /*
  public struct AsyncLineSequenceX<Base>: AsyncSequence
-where Base: AsyncSequence, Base.Element == UInt8 {
-  
-  /// The type of element produced by this asynchronous sequence.
-  public typealias Element = String
-  
-  /// The type of asynchronous iterator that produces elements of this
-  /// asynchronous sequence.
-  public struct AsyncIterator: AsyncIteratorProtocol {
-    public typealias Element = String
-    
-    var _base: Base.AsyncIterator
-    var _peek: UInt8?
-    var encoding : any Unicode.Encoding.Type = UTF8.self
-    
-    public init(_ base : Base.AsyncIterator, encoding : any Unicode.Encoding.Type = UTF8.self ) {
-      self._base = base
-      self._peek = nil
+ where Base: AsyncSequence, Base.Element == UInt8 {
 
-      // FIXME: Tahoe gets rid of setlocale?
-      // let k = setlocale(LC_CTYPE, nil)
-      // let kk = String(cString: k!)
-      // let kkk = kk.split(separator: ".").last ?? "C"
+ /// The type of element produced by this asynchronous sequence.
+ public typealias Element = String
 
-      // FIXME: map other encodings properly
-      // let ase = String.availableStringEncodings
-      // switch kkk {
-      //  case "C": self.encoding =   ISOLatin1.self
-      //  case "UTF-8": self.encoding = UTF8.self
-      //  default: self.encoding = UTF8.self
-      // }
+ /// The type of asynchronous iterator that produces elements of this
+ /// asynchronous sequence.
+ public struct AsyncIterator: AsyncIteratorProtocol {
+ public typealias Element = String
 
-    }
-    
-    /// Asynchronously advances to the next element and returns it, or ends
-    /// the sequence if there is no next element.
-    ///
-    /// - Returns: The next element, if it exists, or `nil` to signal the
-    ///            end of the sequence.
-    public mutating func next() async rethrows -> Element? {
-      var _buffer = [UInt8]()
-      
-      func nextByte() async throws -> UInt8? {
-        if let peek = self._peek {
-          self._peek = nil
-          return peek
-        }
-        let k = try await self._base.next()
-        return k
-      }
-      
-      loop: while let first = try await nextByte() {
-        switch first {
-            // FIXME: handle \r\n line endings...
-          case 0x0A:
-            _buffer.append(first)
-            break loop
-          default:
-            _buffer.append(first)
-        }
-      }
-      
-      
-      // Don't return an empty line when at end of file
-      if !_buffer.isEmpty {
-//        return String(bytes: _buffer, encoding: self.encoding)
-        var j : String
-        if self.encoding == ISOLatin1.self {
-          j = String(decoding: _buffer, as: ISOLatin1.self)
-        } else if self.encoding == UTF8.self {
-          j =  String(decoding: _buffer, as: UTF8.self)
-        } else {
-          j =  String(decoding: _buffer, as: UTF8.self)
-        }
-        return j
-        //              return _buffer
-      } else {
-        return nil
-      }
-    }
-    
-  }
-  
-  let base: Base
-  let encoding : any Unicode.Encoding.Type
-  
-  public init(_ base: Base, encoding: any Unicode.Encoding.Type = UTF8.self ) {
-    self.base = base
-    self.encoding = encoding
-  }
-  
-  /// Creates the asynchronous iterator that produces elements of this
-  /// asynchronous sequence.
-  ///
-  /// - Returns: An instance of the `AsyncIterator` type used to produce
-  ///            elements of the asynchronous sequence.
-  public func makeAsyncIterator() -> AsyncIterator {
-    return AsyncIterator(self.base.makeAsyncIterator(), encoding: encoding)
-  }
-}
-*/
+ var _base: Base.AsyncIterator
+ var _peek: UInt8?
+ var encoding : any Unicode.Encoding.Type = UTF8.self
+
+ public init(_ base : Base.AsyncIterator, encoding : any Unicode.Encoding.Type = UTF8.self ) {
+ self._base = base
+ self._peek = nil
+
+ // FIXME: Tahoe gets rid of setlocale?
+ // let k = setlocale(LC_CTYPE, nil)
+ // let kk = String(cString: k!)
+ // let kkk = kk.split(separator: ".").last ?? "C"
+
+ // FIXME: map other encodings properly
+ // let ase = String.availableStringEncodings
+ // switch kkk {
+ //  case "C": self.encoding =   ISOLatin1.self
+ //  case "UTF-8": self.encoding = UTF8.self
+ //  default: self.encoding = UTF8.self
+ // }
+
+ }
+
+ /// Asynchronously advances to the next element and returns it, or ends
+ /// the sequence if there is no next element.
+ ///
+ /// - Returns: The next element, if it exists, or `nil` to signal the
+ ///            end of the sequence.
+ public mutating func next() async rethrows -> Element? {
+ var _buffer = [UInt8]()
+
+ func nextByte() async throws -> UInt8? {
+ if let peek = self._peek {
+ self._peek = nil
+ return peek
+ }
+ let k = try await self._base.next()
+ return k
+ }
+
+ loop: while let first = try await nextByte() {
+ switch first {
+ // FIXME: handle \r\n line endings...
+ case 0x0A:
+ _buffer.append(first)
+ break loop
+ default:
+ _buffer.append(first)
+ }
+ }
+
+
+ // Don't return an empty line when at end of file
+ if !_buffer.isEmpty {
+ //        return String(bytes: _buffer, encoding: self.encoding)
+ var j : String
+ if self.encoding == ISOLatin1.self {
+ j = String(decoding: _buffer, as: ISOLatin1.self)
+ } else if self.encoding == UTF8.self {
+ j =  String(decoding: _buffer, as: UTF8.self)
+ } else {
+ j =  String(decoding: _buffer, as: UTF8.self)
+ }
+ return j
+ //              return _buffer
+ } else {
+ return nil
+ }
+ }
+
+ }
+
+ let base: Base
+ let encoding : any Unicode.Encoding.Type
+
+ public init(_ base: Base, encoding: any Unicode.Encoding.Type = UTF8.self ) {
+ self.base = base
+ self.encoding = encoding
+ }
+
+ /// Creates the asynchronous iterator that produces elements of this
+ /// asynchronous sequence.
+ ///
+ /// - Returns: An instance of the `AsyncIterator` type used to produce
+ ///            elements of the asynchronous sequence.
+ public func makeAsyncIterator() -> AsyncIterator {
+ return AsyncIterator(self.base.makeAsyncIterator(), encoding: encoding)
+ }
+ }
+ */
 
 public struct AsyncLineReader: AsyncSequence {
-    public typealias Element = String
-    let byteStream: AsyncByteStream
+  public typealias Element = String
+  let byteStream: AsyncByteStream
   var retEOL = false
   var encoding : any Unicode.Encoding.Type = UTF8.self
 
@@ -231,7 +231,7 @@ public struct AsyncLineReader: AsyncSequence {
     retEOL = true
     return self
   }
-  
+
   public struct AsyncIterator: AsyncIteratorProtocol {
     var byteIterator: AsyncByteStream.AsyncIterator
     var buffer = [UInt8]()
@@ -256,7 +256,7 @@ public struct AsyncLineReader: AsyncSequence {
         case is ISOLatin1.Type:
           line = String(validating: buffer, as: ISOLatin1.self )
         case is UTF16.Type:
-        let buff = buffer.withUnsafeBytes { $0.load(as: [UInt16].self) }
+          let buff = buffer.withUnsafeBytes { $0.load(as: [UInt16].self) }
           line = String(validating: buff, as: UTF16.self )
         case is UTF32.Type:
           let buff = buffer.withUnsafeBytes { $0.load(as: [UInt32].self) }
@@ -276,36 +276,36 @@ public struct AsyncLineReader: AsyncSequence {
     }
   }
 
-    public func makeAsyncIterator() -> AsyncIterator {
-      AsyncIterator(byteIterator: byteStream.makeAsyncIterator(), retEOL: retEOL, encoding: encoding)
-    }
+  public func makeAsyncIterator() -> AsyncIterator {
+    AsyncIterator(byteIterator: byteStream.makeAsyncIterator(), retEOL: retEOL, encoding: encoding)
+  }
 }
 
 public func fileExists(atPath: String) -> Bool {
-    var statBuf = stat()
-    return atPath.withCString { cPath in
-        stat(cPath, &statBuf) == 0
-    }
+  var statBuf = stat()
+  return atPath.withCString { cPath in
+    stat(cPath, &statBuf) == 0
+  }
 }
 
 public func isExecutableFile(atPath: String) -> Bool {
-    return atPath.withCString { cPath in
-        access(cPath, X_OK) == 0
-    }
+  return atPath.withCString { cPath in
+    access(cPath, X_OK) == 0
+  }
 }
 
 
 extension FileDescriptor {
   public func readUpToCount(_ count: Int) throws -> [UInt8] {
     var buffer = [UInt8](repeating: 0, count: count)
-    
+
     let bytesRead = try buffer.withUnsafeMutableBytes {
       try self.read(into: $0)
     }
-    
+
     return Array(buffer.prefix(bytesRead))
   }
-  
+
   @discardableResult public func write(_ data : [UInt8]) throws -> Int {
     try self.writeAll(data)
   }
@@ -321,115 +321,115 @@ extension FileDescriptor: @retroactive TextOutputStream {
 
 
 public struct AsyncCharacterReader: AsyncSequence {
-    public typealias Element = Character
-    public let fd: FileDescriptor
-    public let bufferSize: Int
+  public typealias Element = Character
+  public let fd: FileDescriptor
+  public let bufferSize: Int
 
-    public init(fd: FileDescriptor, bufferSize: Int = 4096) {
-        self.fd = fd
-        self.bufferSize = bufferSize
+  public init(fd: FileDescriptor, bufferSize: Int = 4096) {
+    self.fd = fd
+    self.bufferSize = bufferSize
+  }
+
+  public struct AsyncIterator: AsyncIteratorProtocol {
+    let fd: FileDescriptor
+    let bufferSize: Int
+
+    var byteBuffer = [UInt8]()
+    var characterIterator: String.Iterator?
+
+    init(fd: FileDescriptor, bufferSize: Int) {
+      self.fd = fd
+      self.bufferSize = bufferSize
     }
 
-    public struct AsyncIterator: AsyncIteratorProtocol {
-        let fd: FileDescriptor
-        let bufferSize: Int
+    public mutating func next() async throws -> Character? {
+      if var iter = characterIterator, let nextChar = iter.next() {
+        characterIterator = iter
+        return nextChar
+      }
 
-        var byteBuffer = [UInt8]()
-        var characterIterator: String.Iterator?
+      var tempBuffer = [UInt8](repeating: 0, count: bufferSize)
+      let bytesRead = try tempBuffer.withUnsafeMutableBytes {
+        try fd.read(into: $0)
+      }
 
-        init(fd: FileDescriptor, bufferSize: Int) {
-            self.fd = fd
-            self.bufferSize = bufferSize
+      if bytesRead == 0 {
+        return nil // EOF
+      }
+
+      byteBuffer.append(contentsOf: tempBuffer[..<bytesRead])
+
+      var decodedCount = byteBuffer.count
+      while decodedCount > 0 {
+        let slice = byteBuffer.prefix(decodedCount)
+        let decoded = String(decoding: slice, as: UTF8.self)
+        let reencoded = Array(decoded.utf8)
+
+        if reencoded.count == decodedCount {
+          characterIterator = decoded.makeIterator()
+          byteBuffer.removeFirst(decodedCount)
+          return characterIterator?.next()
         }
 
-        public mutating func next() async throws -> Character? {
-            if var iter = characterIterator, let nextChar = iter.next() {
-                characterIterator = iter
-                return nextChar
-            }
+        decodedCount -= 1
+      }
 
-            var tempBuffer = [UInt8](repeating: 0, count: bufferSize)
-            let bytesRead = try tempBuffer.withUnsafeMutableBytes {
-                try fd.read(into: $0)
-            }
-
-            if bytesRead == 0 {
-                return nil // EOF
-            }
-
-            byteBuffer.append(contentsOf: tempBuffer[..<bytesRead])
-
-            var decodedCount = byteBuffer.count
-            while decodedCount > 0 {
-                let slice = byteBuffer.prefix(decodedCount)
-                let decoded = String(decoding: slice, as: UTF8.self)
-                let reencoded = Array(decoded.utf8)
-
-                if reencoded.count == decodedCount {
-                    characterIterator = decoded.makeIterator()
-                    byteBuffer.removeFirst(decodedCount)
-                    return characterIterator?.next()
-                }
-
-                decodedCount -= 1
-            }
-
-            // Wait for more bytes to complete the UTF-8 sequence
-            return try await next()
-        }
+      // Wait for more bytes to complete the UTF-8 sequence
+      return try await next()
     }
+  }
 
-    public func makeAsyncIterator() -> AsyncIterator {
-        AsyncIterator(fd: fd, bufferSize: bufferSize)
-    }
+  public func makeAsyncIterator() -> AsyncIterator {
+    AsyncIterator(fd: fd, bufferSize: bufferSize)
+  }
 }
 
 
 
 public func readFileAsString(at path: String) throws -> String {
-    let fd = try FileDescriptor.open(path, .readOnly)
-    defer { try? fd.close() }
+  let fd = try FileDescriptor.open(path, .readOnly)
+  defer { try? fd.close() }
 
-    var content = [UInt8]()
-    var buffer = [UInt8](repeating: 0, count: 4096)
+  var content = [UInt8]()
+  var buffer = [UInt8](repeating: 0, count: 4096)
 
-    while true {
-        let bytesRead = try buffer.withUnsafeMutableBytes {
-            try fd.read(into: $0)
-        }
-        if bytesRead == 0 { break }
-        content.append(contentsOf: buffer[..<bytesRead])
+  while true {
+    let bytesRead = try buffer.withUnsafeMutableBytes {
+      try fd.read(into: $0)
     }
+    if bytesRead == 0 { break }
+    content.append(contentsOf: buffer[..<bytesRead])
+  }
 
-    // Decode as UTF-8
-    return String(decoding: content, as: UTF8.self)
+  // Decode as UTF-8
+  return String(decoding: content, as: UTF8.self)
 }
 
 public extension FileDescriptor {
-    /// Reads all bytes from the file until EOF.
-    /// - Parameter chunkSize: The size of each read operation (default: 4096 bytes).
-    /// - Returns: A `[UInt8]` array containing the full contents.
-    func readToEnd(chunkSize: Int = 4096) throws -> [UInt8] {
-        var buffer = [UInt8](repeating: 0, count: chunkSize)
-        var result = [UInt8]()
+  /// Reads all bytes from the file until EOF.
+  /// - Parameter chunkSize: The size of each read operation (default: 4096 bytes).
+  /// - Returns: A `[UInt8]` array containing the full contents.
+  func readToEnd(chunkSize: Int = 4096) throws -> [UInt8] {
+    var buffer = [UInt8](repeating: 0, count: chunkSize)
+    var result = [UInt8]()
 
-        while true {
-            let bytesRead = try buffer.withUnsafeMutableBytes {
-                try self.read(into: $0)
-            }
-            if bytesRead == 0 {
-                break // EOF
-            }
-            result.append(contentsOf: buffer[..<bytesRead])
-        }
-
-        return result
+    while true {
+      let bytesRead = try buffer.withUnsafeMutableBytes {
+        try self.read(into: $0)
+      }
+      if bytesRead == 0 {
+        break // EOF
+      }
+      result.append(contentsOf: buffer[..<bytesRead])
     }
+
+    return result
+  }
 }
 
 
 public struct POSIXErrno: Error {
-    public let code: Int32
+  public let code: Int32
 
   public init(_ code: Int32 = errno) {
     self.code = code
@@ -491,7 +491,7 @@ public struct Passwd {
  Retrieve passwd data for provided username.  Generated by ChatGPT
  */
 public func getPasswd(for username: String) -> Passwd? {
-    // Convert Swift string to C string
+  // Convert Swift string to C string
   return username.withPlatformString { cUsername -> Passwd? in
     var pwd = passwd()
     var result: UnsafeMutablePointer<passwd>? = nil
@@ -567,12 +567,12 @@ public func getGroupEntry(of groupId: Int) -> GroupEntry? {
   }
 
   var members: [String] = []
-     var memberPtr = gr.gr_mem
+  var memberPtr = gr.gr_mem
 
-     while let ptr = memberPtr?.pointee {
-         members.append(String(cString: ptr))
-         memberPtr = memberPtr?.advanced(by: 1)
-     }
+  while let ptr = memberPtr?.pointee {
+    members.append(String(cString: ptr))
+    memberPtr = memberPtr?.advanced(by: 1)
+  }
 
   let p = GroupEntry(name: String(cString: gr.gr_name),
                      groupId: Int(gr.gr_gid),
@@ -582,7 +582,7 @@ public func getGroupEntry(of groupId: Int) -> GroupEntry? {
 }
 
 public func getGroupEntry(for groupname: String) -> GroupEntry? {
-    // Convert Swift string to C string
+  // Convert Swift string to C string
   return groupname.withPlatformString { cGroupname -> GroupEntry? in
     var gr = group()
     var result: UnsafeMutablePointer<group>? = nil
@@ -596,15 +596,15 @@ public func getGroupEntry(for groupname: String) -> GroupEntry? {
     }
 
     var members: [String] = []
-       var memberPtr = gr.gr_mem
+    var memberPtr = gr.gr_mem
 
-       while let ptr = memberPtr?.pointee {
-           members.append(String(cString: ptr))
-           memberPtr = memberPtr?.advanced(by: 1)
-       }
+    while let ptr = memberPtr?.pointee {
+      members.append(String(cString: ptr))
+      memberPtr = memberPtr?.advanced(by: 1)
+    }
 
     let p = GroupEntry(name: String(cString: gr.gr_name),
-                   groupId: Int(gr.gr_gid),
+                       groupId: Int(gr.gr_gid),
                        members: members
     )
     return p
@@ -616,15 +616,15 @@ public enum DeviceType {
 }
 
 public struct FileFlags: OptionSet, Sendable {
-    public let rawValue: UInt32
+  public let rawValue: UInt32
 
-    public init(rawValue: UInt32) { self.rawValue = rawValue }
-    public init() { self.rawValue = 0 }
+  public init(rawValue: UInt32) { self.rawValue = rawValue }
+  public init() { self.rawValue = 0 }
 
-    // Example flag values (if you have real flag values, replace or add)
-    public static let none = FileFlags([])
-    public static let someFlag = FileFlags(rawValue: 1 << 0)
-    // Add more specific flags as needed.
+  // Example flag values (if you have real flag values, replace or add)
+  public static let none = FileFlags([])
+  public static let someFlag = FileFlags(rawValue: 1 << 0)
+  // Add more specific flags as needed.
 }
 
 public struct DateTime {
@@ -689,9 +689,9 @@ public struct FileMetadata {
   public var flags : FileFlags           // user defined flags for file
   public var generation : UInt           // file generation number
 
-  public init(for f: String) throws(POSIXErrno) {
+  public init(for f: String, followSymlinks: Bool = true) throws(POSIXErrno) {
     var statbuf = Darwin.stat()
-    let e = stat(f, &statbuf)
+    let e = (followSymlinks ? stat : lstat)(f, &statbuf)
     try self.init(e, statbuf)
   }
 
@@ -709,7 +709,7 @@ public struct FileMetadata {
       fatalError("doesn't throw with errno 0")
     }
   }
-  
+
   private init(_ e : Int32, _ statbuf : stat) throws(POSIXErrno) {
     if e != 0 {
       throw POSIXErrno(e)
@@ -797,15 +797,15 @@ public func searchPath(for filename: String) -> String? {
 
 
 extension UnsafeMutablePointer<stat> {
- public var st_ctime : Int { pointee.st_ctimespec.tv_sec }
- public var st_mtime : Int { pointee.st_mtimespec.tv_sec }
- public var st_atime : Int { pointee.st_atimespec.tv_sec }
- public var st_birthtime : Int { pointee.st_birthtimespec.tv_sec }
+  public var st_ctime : Int { pointee.st_ctimespec.tv_sec }
+  public var st_mtime : Int { pointee.st_mtimespec.tv_sec }
+  public var st_atime : Int { pointee.st_atimespec.tv_sec }
+  public var st_birthtime : Int { pointee.st_birthtimespec.tv_sec }
 
- public var st_ctim : timespec { pointee.st_ctimespec }
- public var st_mtim : timespec { pointee.st_mtimespec }
- public var st_atim : timespec { pointee.st_atimespec }
- public var st_birthtim : timespec { pointee.st_birthtimespec }
+  public var st_ctim : timespec { pointee.st_ctimespec }
+  public var st_mtim : timespec { pointee.st_mtimespec }
+  public var st_atim : timespec { pointee.st_atimespec }
+  public var st_birthtim : timespec { pointee.st_birthtimespec }
 }
 
 extension stat {
@@ -814,10 +814,10 @@ extension stat {
   public var st_atime : Int { st_atimespec.tv_sec }
   public var st_birthtime : Int { st_birthtimespec.tv_sec }
 
- public var st_ctim : timespec { st_ctimespec }
- public var st_mtim : timespec { st_mtimespec }
- public var st_atim : timespec { st_atimespec }
- public var st_birthtim : timespec { st_birthtimespec }
+  public var st_ctim : timespec { st_ctimespec }
+  public var st_mtim : timespec { st_mtimespec }
+  public var st_atim : timespec { st_atimespec }
+  public var st_birthtim : timespec { st_birthtimespec }
 }
 
 enum StringEncodingError : Error {
