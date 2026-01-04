@@ -625,6 +625,64 @@ public struct FileFlags: OptionSet, Sendable {
   public static let none = FileFlags([])
   public static let someFlag = FileFlags(rawValue: 1 << 0)
   // Add more specific flags as needed.
+
+
+  /*
+   * Definitions of flags stored in file flags word.
+   *
+   * Super-user and owner changeable flags.
+   */
+//  public static let SETTABLE     0x0000ffff      /* mask of owner changeable flags */
+  public static let NODUMP       = Self(rawValue: 1 << 0)      /* do not dump file */
+  public static let IMMUTABLE    = Self(rawValue: 1 << 1)      /* file may not be changed */
+  public static let APPEND       = Self(rawValue: 1 << 2)      /* writes to file may only append */
+  public static let OPAQUE       = Self(rawValue: 1 << 3)      /* directory is opaque wrt. union */
+  /*
+   * The following bit is reserved for FreeBSD.  It is not implemented
+   * in Mac OS X.
+   */
+  /* #define UF_NOUNLINK  0x00000010 */  /* file may not be removed or renamed */
+  public static let COMPRESSED   = Self(rawValue: 1 << 5)      /* file is compressed (some file-systems) */
+
+  /* UF_TRACKED is used for dealing with document IDs.  We no longer issue
+   *  notifications for deletes or renames for files which have UF_TRACKED set. */
+  public static let TRACKED      = Self(rawValue: 1 << 6)
+
+  public static let DATAVAULT    = Self(rawValue: 1 << 7)     /* entitlement required for reading */
+                                          /* and writing */
+
+  /* Bits 0x0100 through 0x4000 are currently undefined. */
+  public static let HIDDEN       = Self(rawValue: 1 << 8)     /* hint that this item should not be */
+                                          /* displayed in a GUI */
+  /*
+   * Super-user changeable flags.
+   */
+//  #define SF_SUPPORTED    0x009f0000      /* mask of superuser supported flags */
+//  #define SF_SETTABLE     0x3fff0000      /* mask of superuser changeable flags */
+//  public static let SYNTHETIC    0xc0000000      /* mask of system read-only synthetic flags */
+  public static let SF_ARCHIVED     = Self(rawValue: 1 << 16)      /* file is archived */
+  public static let SF_IMMUTABLE    = Self(rawValue: 1 << 17)      /* file may not be changed */
+  public static let SF_APPEND       = Self(rawValue: 1 << 18)      /* writes to file may only append */
+  public static let SF_RESTRICTED   = Self(rawValue: 1 << 19)      /* entitlement required for writing */
+  public static let SF_NOUNLINK     = Self(rawValue: 1 << 20)      /* Item may not be removed, renamed or mounted on */
+
+  /*
+   * The following two bits are reserved for FreeBSD.  They are not
+   * implemented in Mac OS X.
+   */
+  /* #define SF_SNAPSHOT  0x00200000 */  /* snapshot inode */
+  /* NOTE: There is no SF_HIDDEN bit. */
+
+  public static let SF_FIRMLINK     = Self(rawValue: 1 << 23)      /* file is a firmlink */
+
+  /*
+   * Synthetic flags.
+   *
+   * These are read-only.  We keep them out of SF_SUPPORTED so that
+   * attempts to set them will fail.
+   */
+  public static let SF_DATALESS     = Self(rawValue: 1 << 30)     /* file is dataless object */
+
 }
 
 public struct DateTime {
