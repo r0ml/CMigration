@@ -154,7 +154,8 @@ public struct FtsEntry {
   var fts : FTSWalker?
   var ent : UnsafePointer<FTSENT>
   public var accpath : String
-//  var cycle : Int32
+
+
   var dev : Int32
   public var errno : POSIXErrno
   var flags : Int32
@@ -162,21 +163,27 @@ public struct FtsEntry {
   public var info : FTSInfo
   var instr : Int
   public var level : Int
-//  var link : UnsafeMutablePointer<FTSENT>?
+
   public var name : String!
   public var nlink : Int
-  var number : Int
-//  var parent : UnsafeMutablePointer<FTSENT>?
+  public var number : Int
+
   public var path : String
 //  var pointer : UnsafeRawPointer?
   public var statp : FileMetadata? // UnsafeMutablePointer<stat>?
   var symfd : Int
 
+  public var cycle : UnsafeMutablePointer<FTSENT>?
+  public var parent : UnsafeMutablePointer<FTSENT>?
+  public var link : UnsafeMutablePointer<FTSENT>?
+
   init(_ fts : FTSWalker? = nil, _ ff : UnsafePointer<FTSENT>) {
     self.ent = ff
     self.fts = fts
     let f = ff.pointee
+
 //    var f = fx.pointee
+    self.number = f.fts_number
     self.accpath = String(cString: f.fts_accpath)
 //    self.cycle = f.fts_cycle
     self.dev = f.fts_dev
@@ -189,6 +196,9 @@ public struct FtsEntry {
 //    self.link = f.fts_link
     self.nlink = Int(f.fts_nlink)
 
+    self.cycle = f.fts_cycle
+    self.parent = f.fts_parent
+    self.link = f.fts_link
 
 
     self.number = f.fts_number
