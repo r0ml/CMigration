@@ -633,26 +633,26 @@ public struct FileFlags: OptionSet, Sendable {
    * Super-user and owner changeable flags.
    */
 //  public static let SETTABLE     0x0000ffff      /* mask of owner changeable flags */
-  public static let NODUMP       = Self(rawValue: 1 << 0)      /* do not dump file */
-  public static let IMMUTABLE    = Self(rawValue: 1 << 1)      /* file may not be changed */
-  public static let APPEND       = Self(rawValue: 1 << 2)      /* writes to file may only append */
-  public static let OPAQUE       = Self(rawValue: 1 << 3)      /* directory is opaque wrt. union */
+  public static let UF_NODUMP       = Self(rawValue: 1 << 0)      /* do not dump file */
+  public static let UF_IMMUTABLE    = Self(rawValue: 1 << 1)      /* file may not be changed */
+  public static let UF_APPEND       = Self(rawValue: 1 << 2)      /* writes to file may only append */
+  public static let UF_OPAQUE       = Self(rawValue: 1 << 3)      /* directory is opaque wrt. union */
   /*
    * The following bit is reserved for FreeBSD.  It is not implemented
    * in Mac OS X.
    */
   /* #define UF_NOUNLINK  0x00000010 */  /* file may not be removed or renamed */
-  public static let COMPRESSED   = Self(rawValue: 1 << 5)      /* file is compressed (some file-systems) */
+  public static let UF_COMPRESSED   = Self(rawValue: 1 << 5)      /* file is compressed (some file-systems) */
 
   /* UF_TRACKED is used for dealing with document IDs.  We no longer issue
    *  notifications for deletes or renames for files which have UF_TRACKED set. */
-  public static let TRACKED      = Self(rawValue: 1 << 6)
+  public static let UF_TRACKED      = Self(rawValue: 1 << 6)
 
-  public static let DATAVAULT    = Self(rawValue: 1 << 7)     /* entitlement required for reading */
+  public static let UF_DATAVAULT    = Self(rawValue: 1 << 7)     /* entitlement required for reading */
                                           /* and writing */
 
   /* Bits 0x0100 through 0x4000 are currently undefined. */
-  public static let HIDDEN       = Self(rawValue: 1 << 8)     /* hint that this item should not be */
+  public static let UF_HIDDEN       = Self(rawValue: 1 << 8)     /* hint that this item should not be */
                                           /* displayed in a GUI */
   /*
    * Super-user changeable flags.
