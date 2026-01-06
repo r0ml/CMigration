@@ -615,7 +615,7 @@ public func getGroupEntry(for groupname: String) -> GroupEntry? {
 public enum DeviceType {
 }
 
-public struct FileFlags: OptionSet, Sendable {
+public struct FileFlags: OptionSet, Sendable, Hashable {
   public let rawValue: UInt32
 
   public init(rawValue: UInt32) { self.rawValue = rawValue }
