@@ -621,6 +621,16 @@ public struct FileFlags: OptionSet, Sendable, Hashable {
   public init(rawValue: UInt32) { self.rawValue = rawValue }
   public init() { self.rawValue = 0 }
 
+  public var allFlags : [FileFlags] {
+    var res = [FileFlags]()
+    for i in 0..<31 {
+      if (rawValue & (1 << i)) != 0 {
+        res.append(FileFlags(rawValue: 1 << i))
+      }
+    }
+    return res
+  }
+
   // Example flag values (if you have real flag values, replace or add)
   public static let none = FileFlags([])
   public static let someFlag = FileFlags(rawValue: 1 << 0)
