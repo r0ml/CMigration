@@ -74,55 +74,6 @@ public enum FTSInfo : Int {
       case FTS_W: self = Self.W
       default: self = Self.INVALID
     }
-
-
-/*
- public var FTS_ROOTPARENTLEVEL: Int32 { get }
- public var FTS_ROOTLEVEL: Int32 { get }
- public var FTS_MAXLEVEL: Int32 { get }
- public var FTS_D: Int32 { get }
- public var FTS_DC: Int32 { get }
- public var FTS_DEFAULT: Int32 { get }
- public var FTS_DNR: Int32 { get }
- public var FTS_DOT: Int32 { get }
- public var FTS_DP: Int32 { get }
- public var FTS_ERR: Int32 { get }
- public var FTS_F: Int32 { get }
-
- public var FTS_INIT: Int32 { get }
-
- public var FTS_NS: Int32 { get }
- public var FTS_NSOK: Int32 { get }
- public var FTS_SL: Int32 { get }
- public var FTS_SLNONE: Int32 { get }
-
-    public var FTS_W: Int32 { get }
-
-    public var FTS_DONTCHDIR: Int32 { get }
-
-    public var FTS_SYMFOLLOW: Int32 { get }
-
-    public var FTS_ISW: Int32 { get }
-
-    public var FTS_CHDIRFD: Int32 { get }
-
-    public var FTS_AGAIN: Int32 { get }
-
-    public var FTS_FOLLOW: Int32 { get }
-
-    public var FTS_NOINSTR: Int32 { get }
-
-    public var FTS_SKIP: Int32 { get }
-
-
-
-
-
-
-
-
-
-
   }
 }
 public struct FTSFlags: OptionSet, Sendable {
