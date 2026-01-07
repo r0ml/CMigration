@@ -174,6 +174,8 @@ public struct FtsEntry {
 
   public var path : String
 //  var pointer : UnsafeRawPointer?
+
+  // FIXME: Should this be an Optional?
   public var statp : FileMetadata? // UnsafeMutablePointer<stat>?
   var symfd : Int
 
@@ -186,10 +188,9 @@ public struct FtsEntry {
     self.fts = fts
     let f = ff.pointee
 
-//    var f = fx.pointee
     self.number = f.fts_number
     self.accpath = String(cString: f.fts_accpath)
-//    self.cycle = f.fts_cycle
+
     self.dev = f.fts_dev
     self.errno = POSIXErrno(f.fts_errno)
     self.flags = Int32(f.fts_flags)
@@ -197,7 +198,6 @@ public struct FtsEntry {
     self.info = FTSInfo(Int(f.fts_info))
     self.instr = Int(f.fts_instr)
     self.level = Int(f.fts_level)
-//    self.link = f.fts_link
     self.nlink = Int(f.fts_nlink)
 
     self.cycle = f.fts_cycle
@@ -206,8 +206,6 @@ public struct FtsEntry {
 
 
     self.number = f.fts_number
-//    self.parent = f.fts_parent
-
     self.path = String(cString: f.fts_path)
 
  //   self.pointer = f.fts_pointer
