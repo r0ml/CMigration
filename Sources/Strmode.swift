@@ -32,7 +32,7 @@
 
 // From LibC
 
-func strmode(_ mode : FileType, _ perm : FilePermissions) -> String {
+public func strmode(_ mode : FileType, _ perm : FilePermissions) -> String {
    /* print type */
   var result = ""
   switch mode {
