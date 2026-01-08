@@ -699,7 +699,7 @@ public struct DateTime {
   public var secs : Int
   public var nanosecs : Int
 
-  init(_ t : timespec) {
+  init(_ t : Darwin.timespec) {
     secs = t.tv_sec
     nanosecs = t.tv_nsec
   }
@@ -708,6 +708,9 @@ public struct DateTime {
     Double(secs) + Double(nanosecs) / 1_000_000_000
   }
 
+  public var timespec : Darwin.timespec {
+    return Darwin.timespec(tv_sec: secs, tv_nsec: nanosecs)
+  }
 }
 
 public enum FileType {
