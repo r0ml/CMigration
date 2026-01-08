@@ -36,7 +36,7 @@ import Darwin
 extension FilePath {
   public func isRegularFile() throws -> Bool {
     let statBuf = try FileMetadata(for: self.string)
-    return statBuf.fileType == .regular
+    return statBuf.filetype == .regular
   }
 }
 
@@ -744,8 +744,8 @@ public enum FileType {
 public struct FileMetadata {
   public var device : UInt               // device inode resides on
   public var inode : UInt                // inode's number
-  public var mode : FilePermissions      // inode protection mode
-  public var fileType : FileType             // file type
+  public var permissions: FilePermissions    // inode protection mode
+  public var filetype : FileType             // file type
   public var links : UInt                // number of hard links to the file
   public var userId : UInt               // user-id of owner
   public var groupId : UInt              // group-id of owner
@@ -787,8 +787,8 @@ public struct FileMetadata {
     }
     device = UInt(statbuf.st_dev)
     inode = UInt(statbuf.st_ino)
-    mode = FilePermissions(rawValue: statbuf.st_mode)
-    fileType = FileType(rawValue: statbuf.st_mode)
+    permissions = FilePermissions(rawValue: statbuf.st_mode)
+    filetype = FileType(rawValue: statbuf.st_mode)
     links = UInt(statbuf.st_nlink)
     rawDevice = UInt(statbuf.st_rdev)
     userId = UInt(statbuf.st_uid)
