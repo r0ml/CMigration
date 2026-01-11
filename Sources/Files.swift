@@ -796,7 +796,7 @@ public struct FileMetadata {
     created  = DateTime.init(statbuf.st_birthtimespec)
     lastAccess = DateTime(statbuf.st_atimespec)
     lastWrite = DateTime(statbuf.st_mtimespec)
-    a = DateTime(statbuf.st_ctimespec)
+    lastModification = DateTime(statbuf.st_ctimespec)
     size = UInt(statbuf.st_size)
     blocks = UInt(statbuf.st_blocks)
     blockSize = UInt(statbuf.st_blksize)
