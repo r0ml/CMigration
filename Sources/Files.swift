@@ -785,12 +785,12 @@ public struct FileMetadata {
     if e != 0 {
       throw POSIXErrno(e)
     }
-    device = UInt(statbuf.st_dev)
+    device = UInt(UInt32(bitPattern: statbuf.st_dev))
     inode = UInt(statbuf.st_ino)
     permissions = FilePermissions(rawValue: statbuf.st_mode)
     filetype = FileType(rawValue: statbuf.st_mode)
     links = UInt(statbuf.st_nlink)
-    rawDevice = UInt(statbuf.st_rdev)
+    rawDevice = UInt(UInt32(bitPattern: statbuf.st_rdev))
     userId = UInt(statbuf.st_uid)
     groupId = UInt(statbuf.st_gid)
     created  = DateTime.init(statbuf.st_birthtimespec)
