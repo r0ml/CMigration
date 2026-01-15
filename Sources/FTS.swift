@@ -6,7 +6,7 @@ import Synchronization
 
 public let FTS_ROOTLEVEL = Darwin.FTS_ROOTLEVEL
 
-public enum ComparisonResult: Int {
+public enum ComparisonResult : Int32 {
     case orderedAscending = -1
     case orderedSame = 0
     case orderedDescending = 1
