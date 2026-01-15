@@ -4,6 +4,8 @@
 import Darwin
 import Synchronization
 
+public let FTS_ROOTLEVEL = Darwin.FTS_ROOTLEVEL
+
 public enum ComparisonResult: Int {
     case orderedAscending = -1
     case orderedSame = 0
@@ -11,7 +13,7 @@ public enum ComparisonResult: Int {
 }
 
 final class Context {
-  var fn : (@Sendable (FtsEntry, FtsEntry) -> ComparisonResult)? = nil
+  var fn : (@Sendable (FTSEntry, FTSEntry) -> ComparisonResult)? = nil
   var fe : FTSWalker? = nil
 }
 
@@ -21,8 +23,8 @@ let globalContext = Mutex<Context>(Context())
 // from `find`
 fileprivate func sort_shim(s1: UnsafeMutablePointer<UnsafePointer<FTSENT>?>?, s2: UnsafeMutablePointer<UnsafePointer<FTSENT>?>?) -> Int32 {
   let fe = globalContext.withLock { $0.fe }
-  let a = FtsEntry(fe, s1!.pointee!)
-  let b = FtsEntry(fe, s2!.pointee!)
+  let a = FTSEntry(fe, s1!.pointee!)
+  let b = FTSEntry(fe, s2!.pointee!)
 
   let fn = globalContext.withLock { $0.fn }
   switch fn!(a, b) {
@@ -32,7 +34,7 @@ fileprivate func sort_shim(s1: UnsafeMutablePointer<UnsafePointer<FTSENT>?>?, s2
   }
 }
 
-fileprivate func get_sort_shim(_ fe : FTSWalker?, _ fn : ( @Sendable (FtsEntry, FtsEntry) -> ComparisonResult)?) -> (@convention(c) (UnsafeMutablePointer<UnsafePointer<FTSENT>?>?, UnsafeMutablePointer<UnsafePointer<FTSENT>?>?) -> Int32)? {
+fileprivate func get_sort_shim(_ fe : FTSWalker?, _ fn : ( @Sendable (FTSEntry, FTSEntry) -> ComparisonResult)?) -> (@convention(c) (UnsafeMutablePointer<UnsafePointer<FTSENT>?>?, UnsafeMutablePointer<UnsafePointer<FTSENT>?>?) -> Int32)? {
 //  guard let fn else { return nil }
   globalContext.withLock { @Sendable in
       $0.fn = fn
@@ -99,45 +101,80 @@ public struct FTSFlags: OptionSet, Sendable {
 }
 
 public class FTSWalker: Sequence, IteratorProtocol {
-    var fts: UnsafeMutablePointer<FTS>?
-    private var finished = false
-    private let rootPaths: [String]
-    private let cPath: [UnsafeMutablePointer<CChar>?]
+  var fts: UnsafeMutablePointer<FTS>?
+  private var finished = false
+  private let rootPaths: [String]
+  private let cPath: [UnsafeMutablePointer<CChar>?]
 
-  public init(path: [String], options: FTSFlags = [.LOGICAL, .NOCHDIR], sort: (@Sendable (FtsEntry, FtsEntry) -> ComparisonResult)? = nil) throws(POSIXErrno) {
-        self.rootPaths = path
+  public init(path: [String], options: FTSFlags = [.LOGICAL, .NOCHDIR], sort: (@Sendable (FTSEntry, FTSEntry) -> ComparisonResult)? = nil) throws(POSIXErrno) {
+    self.rootPaths = path
     self.cPath = path.compactMap { strdup($0) }
-        var paths: [UnsafeMutablePointer<CChar>?] = cPath + [nil]
+    var paths: [UnsafeMutablePointer<CChar>?] = cPath + [nil]
 
     let fc = sort == nil ? nil : get_sort_shim(nil, sort!)
     self.fts = fts_open(&paths, options.rawValue, fc)
-        if self.fts == nil {
-          cPath.forEach { free($0) }
-            throw POSIXErrno()
-        }
+    if self.fts == nil {
+      cPath.forEach { free($0) }
+      throw POSIXErrno()
+    }
+  }
+
+  public func next() -> FTSEntry? {
+    guard let fts = self.fts, !finished else { return nil }
+
+    guard let entry = fts_read(fts) else {
+      fts_close(fts)
+      self.fts = nil
+      self.finished = true
+      return nil
     }
 
-    public func next() -> FtsEntry? {
-        guard let fts = self.fts, !finished else { return nil }
+    return FTSEntry(self, entry)
+  }
 
-        guard let entry = fts_read(fts) else {
-            fts_close(fts)
-            self.fts = nil
-            self.finished = true
-            return nil
-        }
-
-      return FtsEntry(self, entry)
+  deinit {
+    if let fts = fts {
+      fts_close(fts)
     }
-
-    deinit {
-        if let fts = fts {
-            fts_close(fts)
-        }
-      cPath.forEach {
-            free($0)
-        }
+    cPath.forEach {
+      free($0)
     }
+  }
+
+  public var children : [FTSEntry] { get {
+    var res = [FTSEntry]()
+    var k = fts_children(fts, 0)
+    while k != nil {
+      res.append(FTSEntry(self, k!))
+      k = k!.pointee.fts_link
+    }
+    return res
+  } }
+
+  public var childNames : [String] { get {
+    var res = [String]()
+    var k = fts_children(fts, FTSFlags.NAMEONLY.rawValue)
+
+    while k != nil {
+      // AAARGH!  The definition of FTSENT (entry) defines the file name as a char[1] -- when in reality,
+      // it is a string longer than 1.  passing this struct as an argument will cause the name to get lost.
+      // so, before the memory beyond the defined end of the struct is tampered with, grab the fts_name from
+      // the struct.
+      let nl = Int(k!.pointee.fts_namelen)
+        let jk = UnsafeRawPointer(k!).advanced(by: MemoryLayout.offset(of: \FTSENT.fts_name)!)
+
+      let nam = jk.withMemoryRebound(to: UInt8.self, capacity: nl) {jj in
+        let buf = UnsafeBufferPointer(start: jj, count: nl)
+          let h = Array(buf)
+          return String(decoding: h, as: UTF8.self)
+        }
+      res.append(nam)
+      k = k!.pointee.fts_link
+    }
+    return res
+  } }
+
+
 }
 
 public enum FTSAction {
@@ -154,7 +191,7 @@ public enum FTSAction {
   }
 }
 
-public struct FtsEntry {
+public struct FTSEntry {
   var fts : FTSWalker?
   var ent : UnsafePointer<FTSENT>
   public var accpath : String
