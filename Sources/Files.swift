@@ -714,7 +714,6 @@ public struct DateTime {
 }
 
 public enum FileType {
-
   case regular
   case symbolicLink
   case socket
@@ -738,6 +737,20 @@ public enum FileType {
       default: self = .unknown
     }
   }
+
+  public var rawValue: UInt16 { get {
+    switch self {
+      case .regular: return S_IFREG
+      case .symbolicLink: return S_IFLNK
+      case .blockDevice: return S_IFBLK
+      case .socket: return S_IFSOCK
+      case .whiteOut: return S_IFWHT
+      case .directory: return S_IFDIR
+      case .characterDevice: return S_IFCHR
+      case .fifo: return S_IFIFO
+      case .unknown: return 0
+    }
+  } }
 
 }
 
