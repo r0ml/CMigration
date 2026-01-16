@@ -119,6 +119,10 @@ public class FTSWalker: Sequence, IteratorProtocol {
     }
   }
 
+  public var dev : UInt { get {
+    return UInt(fts!.pointee.fts_dev)
+  }}
+
   public func next() -> FTSEntry? {
     guard let fts = self.fts, !finished else { return nil }
 
@@ -197,7 +201,7 @@ public struct FTSEntry {
   public var accpath : String
 
 
-  var dev : Int32
+  public var dev : Int32
   public var errno : POSIXErrno
   var flags : Int32
   public var ino : UInt64
