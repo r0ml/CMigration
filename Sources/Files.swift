@@ -879,6 +879,16 @@ public func searchPath(for filename: String) -> String? {
   return nil
 }
 
+func readlink(_ s : String) throws(POSIXErrno) -> String {
+  var path = Array<UInt8>(repeating: 0, count: MAXPATHLEN+1)
+  let lnklen = Darwin.readlink(s, &path, MAXPATHLEN)
+  if lnklen == -1 {
+    throw POSIXErrno(errno)
+  }
+  path[lnklen] = 0
+  let r = String(decoding: path[..<Int(lnklen)], as: UTF8.self)
+  return r
+}
 
 extension UnsafeMutablePointer<stat> {
   public var st_ctime : Int { pointee.st_ctimespec.tv_sec }
