@@ -879,7 +879,7 @@ public func searchPath(for filename: String) -> String? {
   return nil
 }
 
-func readlink(_ s : String) throws(POSIXErrno) -> String {
+public func readlink(_ s : String) throws(POSIXErrno) -> String {
   var path = Array<UInt8>(repeating: 0, count: MAXPATHLEN+1)
   let lnklen = Darwin.readlink(s, &path, MAXPATHLEN)
   if lnklen == -1 {
