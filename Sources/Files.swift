@@ -888,6 +888,18 @@ func readlink(_ s : String) throws(POSIXErrno) -> String {
   path[lnklen] = 0
   let r = String(decoding: path[..<Int(lnklen)], as: UTF8.self)
   return r
+  /*
+   name = withUnsafeTemporaryAllocation(byteCount: Int(PATH_MAX), alignment: 1) { p -> String? in
+     let pp = p.assumingMemoryBound(to: UInt8.self).baseAddress!
+     let len = readlink(entry.accpath, pp , Int(PATH_MAX) - 1)
+     if (len == -1) {
+       return nil
+     } else {
+//          let k = Data(bytes: pp, count: len)
+       return String(decoding: UnsafeBufferPointer(start: pp, count: len), as: Unicode.ASCII.self)
+     }
+   }
+   */
 }
 
 extension UnsafeMutablePointer<stat> {
