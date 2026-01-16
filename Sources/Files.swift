@@ -446,7 +446,7 @@ public struct POSIXErrno: Error {
 
 public let MAXPATHLEN : Int = Int(Darwin.MAXPATHLEN)
 
-public func basename(_ path : String) throws(POSIXErrno) -> String {
+public func basename(_ path : String) -> String {
   // Empty string gets treated as "."
   if path.isEmpty {
     return "."
@@ -471,9 +471,11 @@ public func basename(_ path : String) throws(POSIXErrno) -> String {
     ppath = ppath.dropLast()
   }
 
+  /*
   if res.count >= MAXPATHLEN {
     throw POSIXErrno(ENAMETOOLONG)
   }
+*/
 
   return String(res)
 }
