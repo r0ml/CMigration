@@ -40,21 +40,21 @@ public struct FileSystemFlags : OptionSet, Sendable {
 }
 
 public struct FileSystemMetadata {
-  var bsize : UInt        /* fundamental file system block size */
-  var iosize : UInt       /* optimal transfer block size */
-  var blocks : UInt       /* total data blocks in file system */
-  var bfree : UInt        /* free blocks in fs */
-  var bavail : UInt       /* free blocks avail to non-superuser */
-  var files : UInt        /* total file nodes in file system */
-  var ffree : UInt        /* free file nodes in fs */
-  var fsid : (UInt32, UInt32)  /* file system id */
-  var owner : UInt        /* user that mounted the filesystem */
-  var type : UInt         /* type of filesystem */
-  var flags : FileSystemFlags   /* copy of mount exported flags */
-  var fssubtype : UInt    /* fs sub-type (flavor) */
-  var fstypename : String
-  var mntonname : String
-  var mntfromname : String
+  public var bsize : UInt        /* fundamental file system block size */
+  public var iosize : UInt       /* optimal transfer block size */
+  public var blocks : UInt       /* total data blocks in file system */
+  public var bfree : UInt        /* free blocks in fs */
+  public var bavail : UInt       /* free blocks avail to non-superuser */
+  public var files : UInt        /* total file nodes in file system */
+  public var ffree : UInt        /* free file nodes in fs */
+  public var fsid : (UInt32, UInt32)  /* file system id */
+  public var owner : UInt        /* user that mounted the filesystem */
+  public var type : UInt         /* type of filesystem */
+  public var flags : FileSystemFlags   /* copy of mount exported flags */
+  public var fssubtype : UInt    /* fs sub-type (flavor) */
+  public var fstypename : String
+  public var mntonname : String
+  public var mntfromname : String
 
   public init(for x: String) throws(POSIXErrno) {
     var sfs = statfs()
