@@ -59,17 +59,18 @@ public struct FileSystemMetadata {
   public init(for x: String) throws(POSIXErrno) {
     var sfs = statfs()
     let e = statfs(x, &sfs)
-    try self.init(e, sfs)
+    if (e != 0) { throw POSIXErrno(e) }
+    self.init(from: sfs)
   }
 
   public init(for x : FileDescriptor) throws(POSIXErrno) {
     var sfs = statfs()
     let e = fstatfs(x.rawValue, &sfs)
-    try self.init(e, sfs)
+    if (e != 0) { throw POSIXErrno(e) }
+    self.init(from: sfs)
   }
 
-  private init(_ e : Int32, _ sfs : statfs) throws(POSIXErrno) {
-    if (e != 0) { throw POSIXErrno(e) }
+  public init(from sfs : statfs) {
     bsize = UInt(sfs.f_bsize)
     iosize = UInt(sfs.f_iosize)
     blocks = UInt(sfs.f_blocks)
