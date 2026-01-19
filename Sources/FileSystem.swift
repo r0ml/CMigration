@@ -70,6 +70,25 @@ public struct FileSystemMetadata {
     self.init(from: sfs)
   }
 
+  public init() {
+    bsize = 0
+    iosize = 0
+    blocks = 0
+    bfree = 0
+    bavail = 0
+    files = 0
+    ffree = 0
+    fsid = (0, 0)
+    owner = 0
+    type = 0
+    flags = []
+    fssubtype = 0
+    
+    fstypename = ""
+    mntonname = ""
+    mntfromname = ""
+  }
+
   public init(from sfs : statfs) {
     bsize = UInt(sfs.f_bsize)
     iosize = UInt(sfs.f_iosize)
