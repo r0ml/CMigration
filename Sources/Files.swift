@@ -306,7 +306,7 @@ extension FileDescriptor {
     return Array(buffer.prefix(bytesRead))
   }
 
-  @discardableResult public func write(_ data : [UInt8]) throws -> Int {
+  @discardableResult public func write<S:Sequence>(_ data : S) throws -> Int where S.Element == UInt8  {
     try self.writeAll(data)
   }
 }
