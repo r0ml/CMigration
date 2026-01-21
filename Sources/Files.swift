@@ -787,10 +787,9 @@ public struct FileMetadata {
     try self.init(e, statbuf)
   }
 
-  public init?(from: UnsafePointer<stat>?) {
-    guard from != nil else { return nil }
+  public init(from: UnsafePointer<stat>) {
     do {
-      try self.init(0, from!.pointee)
+      try self.init(0, from.pointee)
     } catch {
       fatalError("doesn't throw with errno 0")
     }

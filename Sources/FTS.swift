@@ -216,8 +216,7 @@ public struct FTSEntry {
   public var path : String
 //  var pointer : UnsafeRawPointer?
 
-  // FIXME: Should this be an Optional?
-  public var statp : FileMetadata? // UnsafeMutablePointer<stat>?
+  public var statp : FileMetadata
   var symfd : Int
 
   public var cycle : UnsafeMutablePointer<FTSENT>?
