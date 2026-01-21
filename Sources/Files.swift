@@ -706,6 +706,11 @@ public struct DateTime {
     nanosecs = t.tv_nsec
   }
 
+  public init(_ t : Darwin.time_t) {
+    secs = t
+    nanosecs = 0
+  }
+  
   public var timeInterval : Double {
     Double(secs) + Double(nanosecs) / 1_000_000_000
   }
