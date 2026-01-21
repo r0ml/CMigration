@@ -701,7 +701,7 @@ public struct DateTime {
   public var secs : Int
   public var nanosecs : Int
 
-  init(_ t : Darwin.timespec) {
+  public init(_ t : Darwin.timespec) {
     secs = t.tv_sec
     nanosecs = t.tv_nsec
   }
