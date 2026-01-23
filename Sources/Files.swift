@@ -706,6 +706,11 @@ public struct DateTime {
     nanosecs = t.tv_nsec
   }
 
+  public init(_ t : any BinaryInteger) {
+    secs = Int(t)
+    nanosecs = 0
+  }
+
   public init(_ t : Darwin.time_t) {
     secs = t
     nanosecs = 0
