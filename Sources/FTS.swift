@@ -23,8 +23,8 @@ let globalContext = Mutex<Context>(Context())
 // from `find`
 fileprivate func sort_shim(s1: UnsafeMutablePointer<UnsafePointer<FTSENT>?>?, s2: UnsafeMutablePointer<UnsafePointer<FTSENT>?>?) -> Int32 {
   let fe = globalContext.withLock { $0.fe }
-  let a = FTSEntry(fe, s1!.pointee!)
-  let b = FTSEntry(fe, s2!.pointee!)
+  let a = FTSEntry(fe, UnsafeMutablePointer(mutating: s1!.pointee!) )
+  let b = FTSEntry(fe, UnsafeMutablePointer(mutating: s2!.pointee!) )
 
   let fn = globalContext.withLock { $0.fn }
   switch fn!(a, b) {
@@ -197,7 +197,7 @@ public enum FTSAction {
 
 public struct FTSEntry {
   var fts : FTSWalker?
-  var ent : UnsafePointer<FTSENT>
+  var ent : UnsafeMutablePointer<FTSENT>
   public var accpath : String
 
 
@@ -211,24 +211,53 @@ public struct FTSEntry {
 
   public var name : String!
   public var nlink : Int
-  public var number : Int
+  public var number : Int {
+    get { return ent.pointee.fts_number }
+    set { ent.pointee.fts_number = newValue }
+  }
 
   public var path : String
-//  var pointer : UnsafeRawPointer?
+
+  public func getPointer<T>() -> T where T : AnyObject {
+      return Unmanaged<T>.fromOpaque(ent.pointee.fts_pointer).takeRetainedValue()
+  }
+  public func setPointer(_ a : AnyObject) {
+      ent.pointee.fts_pointer = Unmanaged.passRetained(a).toOpaque()
+  }
 
   public var statp : FileMetadata
   var symfd : Int
 
-  public var cycle : UnsafeMutablePointer<FTSENT>?
-  public var parent : UnsafeMutablePointer<FTSENT>?
-  public var link : UnsafeMutablePointer<FTSENT>?
+  var cycle_ : UnsafeMutablePointer<FTSENT>?
+  public var cycle : FTSEntry? { get {
+    if let c = cycle_ {
+      return FTSEntry(fts, c)
+    } else {
+      return nil
+    }
+  }}
+  var parent_ : UnsafeMutablePointer<FTSENT>?
+  public var parent : FTSEntry? { get {
+    if let p = parent_ {
+      return FTSEntry(fts, p)
+    } else {
+      return nil
+    }
+  }}
+  var link_ : UnsafeMutablePointer<FTSENT>?
+  public var link : FTSEntry? { get {
+    if let l = link_ {
+      return FTSEntry(fts, l)
+    } else {
+      return nil
+    }
+  }}
 
-  init(_ fts : FTSWalker? = nil, _ ff : UnsafePointer<FTSENT>) {
+  init(_ fts : FTSWalker? = nil, _ ff : UnsafeMutablePointer<FTSENT>) {
     self.ent = ff
     self.fts = fts
     let f = ff.pointee
 
-    self.number = f.fts_number
     self.accpath = String(cString: f.fts_accpath)
 
     self.dev = f.fts_dev
@@ -240,12 +269,11 @@ public struct FTSEntry {
     self.level = Int(f.fts_level)
     self.nlink = Int(f.fts_nlink)
 
-    self.cycle = f.fts_cycle
-    self.parent = f.fts_parent
-    self.link = f.fts_link
+    self.cycle_ = f.fts_cycle
+    self.parent_ = f.fts_parent
+    self.link_ = f.fts_link
 
 
-    self.number = f.fts_number
     self.path = String(cString: f.fts_path)
 
  //   self.pointer = f.fts_pointer
