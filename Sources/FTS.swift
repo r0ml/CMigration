@@ -218,7 +218,7 @@ public struct FTSEntry {
 
   public var path : String
 
-  public func getPointer<T>() -> T? where T : AnyObject {
+  public func getPointer<T>(_ c : T.Type) -> T? where T : AnyObject {
     if ent.pointee.fts_pointer == nil {
       return nil
     } else {
