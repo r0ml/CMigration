@@ -218,11 +218,19 @@ public struct FTSEntry {
 
   public var path : String
 
-  public func getPointer<T>() -> T where T : AnyObject {
+  public func getPointer<T>() -> T? where T : AnyObject {
+    if ent.pointee.fts_pointer == nil {
+      return nil
+    } else {
       return Unmanaged<T>.fromOpaque(ent.pointee.fts_pointer).takeRetainedValue()
+    }
   }
-  public func setPointer(_ a : AnyObject) {
+  public func setPointer(_ a : AnyObject?) {
+    if let a {
       ent.pointee.fts_pointer = Unmanaged.passRetained(a).toOpaque()
+    } else {
+      ent.pointee.fts_pointer = nil
+    }
   }
 
   public var statp : FileMetadata
