@@ -788,13 +788,13 @@ public struct FileMetadata {
   public init(for f: String, followSymlinks: Bool = true) throws(POSIXErrno) {
     var statbuf = Darwin.stat()
     let e = (followSymlinks ? stat : lstat)(f, &statbuf)
-    try self.init(e, statbuf)
+    try self.init(errno, statbuf)
   }
 
   public init(for f: FileDescriptor) throws(POSIXErrno) {
     var statbuf = Darwin.stat()
     let e = fstat(f.rawValue, &statbuf)
-    try self.init(e, statbuf)
+    try self.init(errno, statbuf)
   }
 
   public init(from: UnsafePointer<stat>) {
