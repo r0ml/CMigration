@@ -69,6 +69,33 @@ public struct ISOLatin1: Unicode.Encoding {
  */
 }
 
+enum Latin1EncodingError: Error {
+  case scalarOutOfRange(UnicodeScalar)
+}
+
+// get bytes from String encoded as ISOLatin1
+public extension String {
+  func isoLatin1() throws -> [UInt8] {
+    var result: [UInt8] = []
+    result.reserveCapacity(self.unicodeScalars.count)
+
+    for scalar in self.unicodeScalars {
+      let v = scalar.value
+      guard v <= 0xFF else {
+        throw Latin1EncodingError.scalarOutOfRange(scalar)
+      }
+      result.append(UInt8(v))
+    }
+
+    return result
+  }
+}
+
+
+
+
+
+
 public func regerror(_ n : Int32, _ regx : Darwin.regex_t )  -> String {
   var re = regx
   let s = withUnsafeMutablePointer(to: &re) { rr in

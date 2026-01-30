@@ -137,3 +137,16 @@ public func WIFSIGNALED(_ x : Int32) -> Bool {
   return y != _WSTOPPED && y != 0
 }
 
+
+public func uuidString() -> String {
+  var u = withUnsafeTemporaryAllocation(of: uuid_t.self, capacity: 1) { p in
+    uuid_generate_random(p.baseAddress!)
+    return p[0]
+  }
+
+  // uuid_unparse_lower writes a 36-char + NUL string
+  var buf = [CChar](repeating: 0, count: 37)
+  uuid_unparse_lower(&u, &buf)
+
+  return String(platformString: buf)
+}
