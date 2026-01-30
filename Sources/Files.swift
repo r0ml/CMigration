@@ -941,3 +941,52 @@ enum StringEncodingError : Error {
   case invalidCharacter
 }
 
+
+// =========================================================
+
+// ============================================
+
+public enum DirectoryListError: Error {
+  case opendirFailed(errno: Int32)
+  case readdirFailed(errno: Int32)
+}
+
+public extension FilePath {
+  func listDirectory() throws -> [FilePath] {
+    // opendir wants a C string path
+    let dirString = self.string
+
+    guard let dp = opendir(dirString) else {
+      throw DirectoryListError.opendirFailed(errno: errno)
+    }
+    defer { closedir(dp) }
+
+    var results: [FilePath] = []
+    results.reserveCapacity(64)
+
+    errno = 0
+    while let ent = readdir(dp) {
+      // d_name is a fixed-size CChar array; treat it as a C string
+      let name = withUnsafePointer(to: &ent.pointee.d_name) {
+        $0.withMemoryRebound(to: CChar.self, capacity: Int(NAME_MAX) + 1) {
+          String(cString: $0)
+        }
+      }
+
+//      if !includeDotEntries, (name == "." || name == "..") {
+//        continue
+//      }
+
+      // Build a child path: dir/<name>
+      results.append(self.appending(name))
+      errno = 0
+    }
+
+    if errno != 0 {
+      throw DirectoryListError.readdirFailed(errno: errno)
+    }
+
+    return results
+  }
+}
+
