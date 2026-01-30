@@ -136,7 +136,7 @@ public func WIFSIGNALED(_ x : Int32) -> Bool {
   let y = x & 0x7f
   return y != _WSTOPPED && y != 0
 }
-
+public func WTERMSIG(_ s: Int32) -> Int32 { return s & 0x7f }
 
 public func uuidString() -> String {
   var u = withUnsafeTemporaryAllocation(of: uuid_t.self, capacity: 1) { p in

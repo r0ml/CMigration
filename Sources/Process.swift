@@ -68,396 +68,243 @@ public struct Environment {
    */
 }
 
-/// Running a sub process (using `ProcessRunner` will return the contents of standard output and standard error wrapped in this struct
-public struct ProcessResult : Sendable {
-    public let stdout: String
-    public let stderr: String
-}
-
-/// Running a subprocess (using `ProcessRunner` will throw a ProcessError if
-/// a) the subprocess fails to run (`spawnFailed`) or
-/// b) the subprocess runs and terminates with a non-zero exit status (`nonZeroExit`)
-public enum ProcessError: Error, CustomStringConvertible {
-    case nonZeroExit(code: Int32, stdout: String, stderr: String)
-    case spawnFailed(errno: Int32)
-
-    public var description: String {
-        switch self {
-        case .nonZeroExit(let code, let out, let err):
-            return "Process failed with exit code \(code).\nstdout:\n\(out)\nstderr:\n\(err)"
-        case .spawnFailed(let errno):
-            return "posix_spawn failed with errno \(errno): \(String(cString: strerror(errno)))"
-        }
-    }
-}
-
-/*
-public struct ProcessRunner {
-  public static func run(command: String, arguments: [String],
-                         currentDirectory : String? = nil,
-                         environment: [String: String]? = nil,
-                         prelaunch: (@Sendable (pid_t) async -> ())? = nil,
-                         captureStdout: Bool = true,
-                         captureStderr: Bool = true) throws -> ProcessResult {
-
-    var stdoutPipe : (readEnd: FileDescriptor, writeEnd: FileDescriptor)? = nil
-
-    if captureStdout {
-      stdoutPipe = try FileDescriptor.pipe()
-    }
-
-    var stderrPipe : (readEnd: FileDescriptor, writeEnd: FileDescriptor)? = nil
-
-    if captureStderr {
-      stderrPipe = try FileDescriptor.pipe()
-    }
-
-        defer {
-            try? stdoutPipe?.readEnd.close()
-            try? stdoutPipe?.writeEnd.close()
-            try? stderrPipe?.readEnd.close()
-            try? stderrPipe?.writeEnd.close()
-        }
-
-        var fileActions: posix_spawn_file_actions_t?
-        posix_spawn_file_actions_init(&fileActions)
-
-      if let cwd = currentDirectory {
-        // FIXME: not available on iOS
-          posix_spawn_file_actions_addchdir_np(&fileActions, cwd)
-      }
-      
-        // Redirect stdout and stderr
-    if captureStdout {
-      posix_spawn_file_actions_adddup2(&fileActions, stdoutPipe!.writeEnd.rawValue, STDOUT_FILENO)
-      posix_spawn_file_actions_addclose(&fileActions, stdoutPipe!.readEnd.rawValue)
-    }
-
-    if captureStderr {
-      posix_spawn_file_actions_adddup2(&fileActions, stderrPipe!.writeEnd.rawValue, STDERR_FILENO)
-      posix_spawn_file_actions_addclose(&fileActions, stderrPipe!.readEnd.rawValue)
-    }
-
-        let argv: [UnsafeMutablePointer<CChar>?] = ([command] + arguments).map { strdup($0) } + [nil]
-
-        var pid: pid_t = 0
-    
-    var ev = environ
-    if let environment {
-      ev = UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>.allocate(capacity: environment.count + 1)
-      defer { ev.deallocate() }
-      var i = 0
-      for (k, v) in environment {
-        ev[i] = strdup("\(k)=\(v)")
-        i += 1
-      }
-      ev[i] = nil
-    }
-        let spawnResult = posix_spawn(&pid, command, &fileActions, nil, argv, ev)
-
-        for ptr in argv where ptr != nil {
-            free(ptr)
-        }
-    
-        posix_spawn_file_actions_destroy(&fileActions)
-
-        guard spawnResult == 0 else {
-            throw ProcessError.spawnFailed(errno: spawnResult)
-        }
-    
-    if let prelaunch { let p = pid; Task { await prelaunch(p) } }
-
-    
-
-        // Close child ends in parent
-    var stdo : String = ""
-    var stde : String = ""
-
-    if captureStdout {
-      // Capture stdout
-      try stdoutPipe!.writeEnd.close()
-      stdo = try readAll(from: stdoutPipe!.readEnd)
-    }
-    if captureStderr {
-      try stderrPipe!.writeEnd.close()
-      stde = try readAll(from: stderrPipe!.readEnd)
-    }
-
-
-
-
-        // Wait for child
-        var status: Int32 = 0
-        waitpid(pid, &status, 0)
-        let exitCode = WIFEXITED(status) ? WEXITSTATUS(status) : -1
-
-        if exitCode != 0 {
-            throw ProcessError.nonZeroExit(code: exitCode, stdout: stdo, stderr: stde)
-        }
-
-        return ProcessResult(stdout: stdo, stderr: stde)
-    }
-
-    private static func readAll(from fd: FileDescriptor) throws -> String {
-        var output = ""
-        var buffer = [UInt8](repeating: 0, count: 4096)
-
-        while true {
-            let bytesRead = try buffer.withUnsafeMutableBytes {
-                try fd.read(into: $0)
-            }
-            if bytesRead == 0 { break }
-                output += String(decoding: buffer[..<bytesRead], as: UTF8.self)
-        }
-
-        return output
-    }
-}
-
- */
-
-/**
- example usage:
- 
- do {
-     let result = try ProcessRunner.run(command: "/bin/ls", arguments: ["-l", "/no/such/dir"], forwardStdoutToParent: true)
-     // When forwarding is enabled, the corresponding field in ProcessResult will be an empty string.
-     print(result.stdout)
- } catch {
-     print("Error: \(error)")
- }
- */
-
-/// THis protocol identifies the classes which can be passed as standard input to `ProcessRunner`
 public protocol Stdinable : Sendable {}
 extension String : Stdinable {}
-extension FileDescriptor : Stdinable {}
-extension AsyncStream<UInt8> : Stdinable {}
+extension Substring : Stdinable {}
 extension [UInt8] : Stdinable {}
+extension FileDescriptor : Stdinable {}
+extension AsyncStream : Stdinable {}
+extension FilePath : Stdinable {}
 
-/// This struct is used to spawn a subprocess and run it.
-public struct ProcessRunner {
-  var command : String
-  var arguments: [String]
-  var environment : [String : String]?
-  var currentDirectory : String?
+public protocol Arguable : Sendable {
+  func asStringArgument() -> String
+}
+extension Substring : Arguable {
+  public func asStringArgument() -> String { return String(self) }
+}
+extension String : Arguable {
+  public func asStringArgument() -> String { return self }
+}
+extension FilePath : Arguable {
+  public func asStringArgument() -> String { return self.string }
+}
 
-  public init(command: String, arguments: [String], currentDirectory: String? = nil, environment: [String: String]? = nil) {
-    self.command = command
-    self.arguments = arguments
-    self.environment = environment
-    self.currentDirectory = currentDirectory
+
+public actor DarwinProcess {
+
+  public struct Output : Sendable {
+    public let code : Int32
+    public let data : [UInt8]
+    public let error : String
+
+    public var string : String { String(decoding: data, as: UTF8.self) }
   }
 
-  public func run(
-    input: (any Stdinable)? = nil,
-    prelaunch: (@Sendable (pid_t) async -> ())? = nil,
-    captureStdout: Bool = true,
-    captureStderr: Bool = true) async throws -> ProcessResult {
+  public init() {}
 
-      var stdinPipe : (readEnd: FileDescriptor, writeEnd: FileDescriptor)? = nil
-      if input == nil {
-        stdinPipe = try FileDescriptor.pipe()
-      }
+  /*
+   // An alternative to using Stdinable; make an enum of possible ways to pass stdin
+   public enum StandardInput: Sendable {
+   case inherit
+   case string(String)
+   case bytes([UInt8])
+   case fileDescriptor(FileDescriptor)
+   case filePath(FilePath)
+   case byteStream(AsyncStream<[UInt8]>)
+   }
+   */
 
-      var stdoutPipe : (readEnd: FileDescriptor, writeEnd: FileDescriptor)? = nil
-
-      if captureStdout {
-        stdoutPipe = try FileDescriptor.pipe()
-      }
-
-      var stderrPipe : (readEnd: FileDescriptor, writeEnd: FileDescriptor)? = nil
-
-      if captureStderr {
-        stderrPipe = try FileDescriptor.pipe()
-      }
-
-      defer {
-        try? stdoutPipe?.readEnd.close()
-        try? stdoutPipe?.writeEnd.close()
-        try? stderrPipe?.readEnd.close()
-        try? stderrPipe?.writeEnd.close()
-      }
-
-      var fileActions: posix_spawn_file_actions_t?
-      posix_spawn_file_actions_init(&fileActions)
-
-      if let cwd = currentDirectory {
-        // FIXME: not available on iOS
-        posix_spawn_file_actions_addchdir_np(&fileActions, cwd)
-      }
-
-      // I either want to have stdin be passed through
-      // or stdin is set to the file descriptor for an input file
-      // or stdin is set to the file descriptor for the stdin pipe which will be fed from a String, [UInt8] or AsyncStream<UInt8>
-      switch input {
-        case nil:
-          posix_spawn_file_actions_adddup2(&fileActions,  FileDescriptor.standardInput.rawValue, STDIN_FILENO)
-        case is FileDescriptor:
-posix_spawn_file_actions_adddup2(&fileActions, (input as! FileDescriptor).rawValue, STDIN_FILENO)
-        default:
-          posix_spawn_file_actions_adddup2(&fileActions, stdinPipe!.readEnd.rawValue, STDIN_FILENO)
-
-      }
-
-
-      // Redirect stdout and stderr
-      if captureStdout {
-        posix_spawn_file_actions_adddup2(&fileActions, stdoutPipe!.writeEnd.rawValue, STDOUT_FILENO)
-        posix_spawn_file_actions_addclose(&fileActions, stdoutPipe!.readEnd.rawValue)
-      }
-
-      if captureStderr {
-        posix_spawn_file_actions_adddup2(&fileActions, stderrPipe!.writeEnd.rawValue, STDERR_FILENO)
-        posix_spawn_file_actions_addclose(&fileActions, stderrPipe!.readEnd.rawValue)
-      }
-
-      let argv: [UnsafeMutablePointer<CChar>?] = ([command]+arguments).map { strdup($0) } + [nil]
-
-      var pid: pid_t = 0
-
-      var ev = environ
-      if let environment {
-        ev = UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>.allocate(capacity: environment.count + 1)
- //       defer {
- /*         var i = 0
-          while let j = ev[i] {
-            free(j)
-          }
-  */
-//          ev.deallocate()
-//       }
-        var i = 0
-        for (k, v) in environment {
-          ev[i] = strdup("\(k)=\(v)")
-          i += 1
-        }
-        ev[i] = nil
-      }
-
-      let cc = searchPath(for: command)
-
-      let spawnResult = posix_spawn(&pid, cc, &fileActions, nil, argv, ev)
-
-      for ptr in argv where ptr != nil {
-        free(ptr)
-      }
-
-      posix_spawn_file_actions_destroy(&fileActions)
-
-      guard spawnResult == 0 else {
-        throw ProcessError.spawnFailed(errno: spawnResult)
-      }
-
-      if let prelaunch { let p = pid; Task { await prelaunch(p) } }
-
-
-
-      // Close child ends in parent
-      var stdo : String = ""
-      var stde : String = ""
-
-      if let ii = input {
-        Task.detached {
-          switch ii {
-            case is [UInt8]:
-              let w = stdinPipe!.writeEnd
-              try w.writeAll(ii as! [UInt8])
-            case is String:
-              var j = ii as! String
-              let w = stdinPipe!.writeEnd
-              let n = try j.withUTF8 { bp in
-                try w.writeAll(UnsafeRawBufferPointer(bp) )
-              }
-            case is AsyncStream<UInt8>:
-              var j = ii as! AsyncStream<UInt8>
-              let w = stdinPipe!.writeEnd
-              for try await i in j {
-                try w.write([i])
-              }
-            case is FileDescriptor:
-              break
-/*              var j = ii as! FileDescriptor
-              for try await i in j.bytes {
-                try w.write([i])
-              }
- */
-            default:
-              fatalError("Unsupported input type \(type(of: ii))")
-          }
-        }
-      }
-      if captureStdout {
-        // Capture stdout
-        try stdoutPipe!.writeEnd.close()
-        stdo = try readAll(from: stdoutPipe!.readEnd)
-      }
-      if captureStderr {
-        try stderrPipe!.writeEnd.close()
-        stde = try readAll(from: stderrPipe!.readEnd)
-      }
-
-      // Wait for child
-      let status = try await waitpidAsync(pid)
-      let exitCode = WIFEXITED(status) ? WEXITSTATUS(status) : -1
-
-      if exitCode != 0 {
-        throw ProcessError.nonZeroExit(code: exitCode, stdout: stdo, stderr: stde)
-      }
-
-      return ProcessResult(stdout: stdo, stderr: stde)
-    }
-
-  private func readAll(from fd: FileDescriptor) throws -> String {
-    var output = ""
-    var buffer = [UInt8](repeating: 0, count: 4096)
-
-    while true {
-      let bytesRead = try buffer.withUnsafeMutableBytes {
-        try fd.read(into: $0)
-      }
-      if bytesRead == 0 { break }
-      output += String(decoding: buffer[..<bytesRead], as: UTF8.self)
-    }
-
-    return output
-  }
-
-
-
-
-  /// Asynchronously wait for a process with the given PID to exit.
   /// - Parameters:
-  ///   - pid: The process ID to wait for.
-  ///   - options: POSIX wait options (e.g., WNOHANG, WUNTRACED).
-  /// - Returns: The exit status of the child process.
-  private func waitpidAsync(_ pid: pid_t, options: CInt = 0) async throws -> CInt {
-    return try await withCheckedThrowingContinuation { continuation in
-      var status: CInt = 0
-      let result = waitpid(pid, &status, options)
+  ///   - stdin: If non-nil, bytes are written to the child process stdin and then stdin is closed.
+  public func run(
+    _ executablePath: String,
+    withStdin: (any Stdinable)? = nil,
+    args arguments: [any Arguable] = [],
+    env : [String : String] = [:],
+    cd : FilePath? = nil
+  ) async throws -> Output {
+    // Pipes for stdout/stderr (always captured)
+    let (stdoutR, stdoutW) = try FileDescriptor.pipe()
+    let (stderrR, stderrW) = try FileDescriptor.pipe()
 
-      if result == -1 {
-        continuation.resume(throwing: POSIXErrno())
-      } else {
-        continuation.resume(returning: status)
+    // posix_spawn file actions are optional-opaque on Darwin in Swift
+    var actions: posix_spawn_file_actions_t? = nil
+    let irc = posix_spawn_file_actions_init(&actions)
+    if irc != 0 { throw POSIXErrno(irc, fn: "posix_spawn_file_actions_init") }
+    defer { posix_spawn_file_actions_destroy(&actions) }
+
+
+    var stdinWriteFDForParent: FileDescriptor? = nil
+    var openedStdinFDToCloseInParent: FileDescriptor? = nil
+
+    switch withStdin {
+
+      case is FilePath:
+        let fp = withStdin as! FilePath
+        let fd = try FileDescriptor.open(fp, .readOnly)
+        openedStdinFDToCloseInParent = fd
+        try addDup2AndClose(&actions, from: fd.rawValue, to: STDIN_FILENO, closeSourceInChild: false)
+      case is FileDescriptor:
+        let fd = withStdin as! FileDescriptor
+        try addDup2AndClose(&actions, from: fd.rawValue, to: STDIN_FILENO, closeSourceInChild: false)
+      case is Substring, is String, is [UInt8], is AsyncStream<[UInt8]>:
+        let (r, w) = try FileDescriptor.pipe()
+        // Wire child's stdio
+        try addDup2AndClose(&actions, from: r.rawValue, to: STDIN_FILENO,  closeSourceInChild: true)
+        try r.close()
+        stdinWriteFDForParent = w
+      default:
+        break
+    }
+
+    try addDup2AndClose(&actions, from: stdoutW.rawValue, to: STDOUT_FILENO, closeSourceInChild: true)
+    try addDup2AndClose(&actions, from: stderrW.rawValue, to: STDERR_FILENO, closeSourceInChild: true)
+
+    // Optional cwd (Darwin extension)
+    if let cwd = cd {
+      #if os(macOS)
+      let rc = cwd.withPlatformString { posix_spawn_file_actions_addchdir_np(&actions, $0) }
+      #else
+      let rc = ENOTSUP
+      #endif
+      if rc != 0 { throw POSIXErrno(rc, fn: "posix_spawn_file_actions_addchdir_np") }
+
+    }
+
+    // Spawn
+    let argvStrings = [executablePath] + arguments.map { $0.asStringArgument() }
+
+    let envpStrings: [String]? = env.map { "\($0.key)=\($0.value)" }
+
+    var pid: pid_t = 0
+    let spawnRC: Int32 = try withCStringArray(argvStrings) { argv in
+      try withUnsafePointer(to: actions) { actionsPtr in
+        if let envpStrings {
+          return try withCStringArray(envpStrings) { envp in
+            posix_spawn(&pid, executablePath, actionsPtr, nil, argv, envp)
+          }
+        } else {
+          return posix_spawn(&pid, executablePath, actionsPtr, nil, argv, environ)
+        }
       }
+    }
+    if spawnRC != 0 { throw POSIXErrno(spawnRC, fn: "posix_spawn") }
+
+    // Parent side: close pipe ends we must not keep open.
+    // - For stdout/stderr: close the write ends in the parent (child owns those).
+    try stdoutW.close()
+    try stderrW.close()
+
+    // Parent closes any stdin file FD it opened (child has its own dup2’d copy).
+    if let fd = openedStdinFDToCloseInParent { try? fd.close() }
+
+
+    async let stdinDone: Void = {
+      guard let w = stdinWriteFDForParent else { return }
+      defer { try? w.close() }
+
+      switch withStdin {
+        case is String:
+          let s = withStdin as! String
+          try await w.writeAllBytes(Array(s.utf8))
+        case is Substring:
+          let s = String(withStdin as! Substring)
+          try await w.writeAllBytes(Array(s.utf8))
+        case is [UInt8]:
+          let b = withStdin as! [UInt8]
+          try await w.writeAllBytes(b)
+        case is AsyncStream<[UInt8]>:
+          let stream = withStdin as! AsyncStream<[UInt8]>
+          for await chunk in stream {
+            if Task.isCancelled { throw CancellationError() }
+            try await w.writeAllBytes(chunk)
+          }
+        default: break
+      }
+    }()
+
+
+    // Concurrently:
+    // - drain stdout/stderr
+    // - wait for exit
+    // - (optionally) write stdin then close it to deliver EOF
+    async let outBytes: [UInt8] = stdoutR.readAllBytes()
+    async let errBytes: [UInt8] = stderrR.readAllBytes()
+    async let status: Int32 = Self.waitForExit(pid: pid)
+
+
+    let (stdout, stderrRaw, terminationStatus, _) = try await (outBytes, errBytes, status, stdinDone)
+
+    // Close read ends after drain
+    try? stdoutR.close()
+    try? stderrR.close()
+
+    let stderr = String(decoding: stderrRaw, as: UTF8.self)
+    return Output(code: terminationStatus, data: stdout, error: stderr)
+  }
+
+  // MARK: - Helpers
+
+
+
+
+  private static func waitForExit(pid: pid_t) async throws -> Int32 {
+    try await Task.detached {
+      var status: Int32 = 0
+      while true {
+        let w = Darwin.waitpid(pid, &status, 0)
+        if w == -1 {
+          if errno == EINTR { continue }
+          throw POSIXErrno(fn: "waitpid")
+        }
+        break
+      }
+
+      if WIFEXITED(status) { return WEXITSTATUS(status) }
+      if WIFSIGNALED(status) { return 128 + WTERMSIG(status) }
+      return status
+    }.value
+  }
+
+
+  // MARK: - posix_spawn file actions wiring (Darwin Swift overlay)
+
+  private func addDup2AndClose(
+    _ actions: inout posix_spawn_file_actions_t?,
+    from: Int32,
+    to: Int32,
+    closeSourceInChild: Bool
+  ) throws {
+    let rc = posix_spawn_file_actions_adddup2(&actions, from, to)
+    if rc != 0 { throw POSIXErrno(rc, fn: "posix_spawn_file_actions_adddup2") }
+
+    if closeSourceInChild {
+      let rc2 = posix_spawn_file_actions_addclose(&actions, from)
+      if rc2 != 0 { throw POSIXErrno(rc2, fn: "posix_spawn_file_actions_addclose") }
     }
   }
 }
 
-/**
- example usage:
+private func withCStringArray<R>(
+    _ strings: [String],
+    _ body: ([UnsafeMutablePointer<CChar>?]) throws -> R
+) throws -> R {
+    var cStrings: [UnsafeMutablePointer<CChar>?] = []
+    cStrings.reserveCapacity(strings.count + 1)
 
- do {
-     let result = try ProcessRunner2(command: "/bin/ls", arguments: ["-l", "/no/such/dir"]).run(input: "input")
- // When forwarding is enabled, the corresponding field in ProcessResult will be an empty string.
-     print(result.stdout)
- } catch {
-     print("Error: \(error)")
- }
-*/
+    for s in strings {
+        cStrings.append(strdup(s))
+    }
+    cStrings.append(nil)
 
+    defer {
+        for p in cStrings where p != nil { free(p) }
+    }
 
+    return try body(cStrings)
+}
+
+// ===================================================================================================
 /**
  Implemented for find.
   */
