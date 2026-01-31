@@ -997,3 +997,19 @@ public extension FilePath {
     }
 }
 
+
+public extension FileDescriptor {
+  func setPermissions(_ p : FilePermissions) throws {
+    if 0 != fchmod(self.rawValue, p.rawValue) {
+      throw POSIXErrno(fn: "setPermissions")
+    }
+  }
+}
+
+public extension FilePath {
+  func setPermissions(_ p : FilePermissions) throws {
+    if 0 != chmod(self.string, p.rawValue) {
+      throw POSIXErrno(fn: "setPermissions")
+    }
+  }
+}
