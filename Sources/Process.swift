@@ -125,6 +125,18 @@ public actor DarwinProcess {
    }
    */
 
+
+  public func launch(
+    _ executablePath: String,
+    withStdin: (any Stdinable)? = nil,
+    args arguments: any Arguable...,
+    env : [String : String] = [:],
+    cd : FilePath? = nil,
+    captureOutput: Bool = true
+  ) throws -> pid_t {
+    return try launch(executablePath, withStdin: withStdin, args: arguments, env: env, cd: cd, captureOutput: captureOutput)
+  }
+
   /// - Parameters:
   ///   - stdin: If non-nil, bytes are written to the child process stdin and then stdin is closed.
   public func launch(
@@ -134,7 +146,7 @@ public actor DarwinProcess {
     env : [String : String] = [:],
     cd : FilePath? = nil,
     captureOutput: Bool = true
-  ) async throws -> pid_t {
+  ) throws -> pid_t {
     // Pipes for stdout/stderr (always captured)
     if launched { fatalError("already launched once") }
     launched = true
@@ -265,13 +277,24 @@ public actor DarwinProcess {
   public func run(
     _ executablePath: String,
     withStdin: (any Stdinable)? = nil,
+    args arguments: any Arguable...,
+    env : [String : String] = [:],
+    cd : FilePath? = nil,
+    captureOutput: Bool = true
+  ) async throws -> Output {
+    return try await run(executablePath, withStdin: withStdin, args: arguments, env: env, cd: cd, captureOutput: captureOutput)
+  }
+
+  public func run(
+    _ executablePath: String,
+    withStdin: (any Stdinable)? = nil,
     args arguments: [any Arguable] = [],
     env : [String : String] = [:],
     cd : FilePath? = nil,
     captureOutput: Bool = true
   ) async throws -> Output {
 
-    let pid = try await launch(
+    let pid = try launch(
       executablePath,
       withStdin: withStdin,
       args: arguments,
