@@ -121,10 +121,16 @@ public actor DarwinProcess {
     withStdin: (any Stdinable)? = nil,
     args arguments: [any Arguable] = [],
     env : [String : String] = [:],
-    cd : FilePath? = nil
+    cd : FilePath? = nil,
+    captureOutput: Bool = true
   ) async throws -> Output {
     // Pipes for stdout/stderr (always captured)
-    let (stdoutR, stdoutW) = try FileDescriptor.pipe()
+    var stdoutR : FileDescriptor? = nil
+    var stdoutW : FileDescriptor? = nil
+
+    if captureOutput {
+      (stdoutR, stdoutW) = try FileDescriptor.pipe()
+    }
     let (stderrR, stderrW) = try FileDescriptor.pipe()
 
     // posix_spawn file actions are optional-opaque on Darwin in Swift
@@ -157,7 +163,9 @@ public actor DarwinProcess {
         break
     }
 
-    try addDup2AndClose(&actions, from: stdoutW.rawValue, to: STDOUT_FILENO, closeSourceInChild: true)
+    if captureOutput {
+      try addDup2AndClose(&actions, from: stdoutW!.rawValue, to: STDOUT_FILENO, closeSourceInChild: true)
+    }
     try addDup2AndClose(&actions, from: stderrW.rawValue, to: STDERR_FILENO, closeSourceInChild: true)
 
     // Optional cwd (Darwin extension)
@@ -192,7 +200,10 @@ public actor DarwinProcess {
 
     // Parent side: close pipe ends we must not keep open.
     // - For stdout/stderr: close the write ends in the parent (child owns those).
-    try stdoutW.close()
+//    if captureOutput {
+      try stdoutW?.close()
+//    }
+
     try stderrW.close()
 
     // Parent closes any stdin file FD it opened (child has its own dup2’d copy).
@@ -206,18 +217,18 @@ public actor DarwinProcess {
       switch withStdin {
         case is String:
           let s = withStdin as! String
-          try await w.writeAllBytes(Array(s.utf8))
+          try w.writeAllBytes(Array(s.utf8))
         case is Substring:
           let s = String(withStdin as! Substring)
-          try await w.writeAllBytes(Array(s.utf8))
+          try w.writeAllBytes(Array(s.utf8))
         case is [UInt8]:
           let b = withStdin as! [UInt8]
-          try await w.writeAllBytes(b)
+          try w.writeAllBytes(b)
         case is AsyncStream<[UInt8]>:
           let stream = withStdin as! AsyncStream<[UInt8]>
           for await chunk in stream {
             if Task.isCancelled { throw CancellationError() }
-            try await w.writeAllBytes(chunk)
+            try w.writeAllBytes(chunk)
           }
         default: break
       }
@@ -228,15 +239,19 @@ public actor DarwinProcess {
     // - drain stdout/stderr
     // - wait for exit
     // - (optionally) write stdin then close it to deliver EOF
-    async let outBytes: [UInt8] = stdoutR.readAllBytes()
-    async let errBytes: [UInt8] = stderrR.readAllBytes()
+
+    async let outBytes: [UInt8] = if captureOutput { Task.detached {
+      try! stdoutR!.readAllBytes()
+    }.value
+    } else { [UInt8]() }
+    async let errBytes: [UInt8] = Task.detached { try! stderrR.readAllBytes() }.value
     async let status: Int32 = Self.waitForExit(pid: pid)
 
 
     let (stdout, stderrRaw, terminationStatus, _) = try await (outBytes, errBytes, status, stdinDone)
 
     // Close read ends after drain
-    try? stdoutR.close()
+    try? stdoutR?.close()
     try? stderrR.close()
 
     let stderr = String(decoding: stderrRaw, as: UTF8.self)
