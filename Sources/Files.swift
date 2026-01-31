@@ -1013,3 +1013,11 @@ public extension FilePath {
     }
   }
 }
+
+public extension FilePath {
+  func createSymbolicLink(to target: FilePath) throws {
+    if 0 != symlink(target.string, self.string) {
+      throw POSIXErrno(fn: "createSymbolicLink")
+    }
+  }
+}
