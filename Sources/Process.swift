@@ -100,6 +100,17 @@ public actor DarwinProcess {
     public var string : String { String(decoding: data, as: UTF8.self) }
   }
 
+
+  public var pid : pid_t = 0
+  var stdinWriteFDForParent: FileDescriptor? = nil
+  var stdoutR : FileDescriptor? = nil
+  var stderrR : FileDescriptor? = nil
+  var feederTask : Task<Void, Error>? = nil
+  var readerTask : Task<[UInt8], Error>? = nil
+  var actions: posix_spawn_file_actions_t? = nil
+  var awaitingValue = false
+  var launched = false
+
   public init() {}
 
   /*
@@ -116,31 +127,35 @@ public actor DarwinProcess {
 
   /// - Parameters:
   ///   - stdin: If non-nil, bytes are written to the child process stdin and then stdin is closed.
-  public func run(
+  public func launch(
     _ executablePath: String,
     withStdin: (any Stdinable)? = nil,
     args arguments: [any Arguable] = [],
     env : [String : String] = [:],
     cd : FilePath? = nil,
     captureOutput: Bool = true
-  ) async throws -> Output {
+  ) async throws -> pid_t {
     // Pipes for stdout/stderr (always captured)
-    var stdoutR : FileDescriptor? = nil
+    if launched { fatalError("already launched once") }
+    launched = true
+
+    // FIXME: as a life-cycle matter, only one "launch" per instance is allowed.
+    // also, only "value" per instance is allowed (and it must folow "launch"
+
     var stdoutW : FileDescriptor? = nil
+    var stderrW : FileDescriptor
 
     if captureOutput {
       (stdoutR, stdoutW) = try FileDescriptor.pipe()
     }
-    let (stderrR, stderrW) = try FileDescriptor.pipe()
+    (stderrR, stderrW) = try FileDescriptor.pipe()
 
     // posix_spawn file actions are optional-opaque on Darwin in Swift
-    var actions: posix_spawn_file_actions_t? = nil
-    let irc = posix_spawn_file_actions_init(&actions)
+     let irc = posix_spawn_file_actions_init(&actions)
     if irc != 0 { throw POSIXErrno(irc, fn: "posix_spawn_file_actions_init") }
-    defer { posix_spawn_file_actions_destroy(&actions) }
+    defer { posix_spawn_file_actions_destroy(&actions); actions = nil }
 
 
-    var stdinWriteFDForParent: FileDescriptor? = nil
     var openedStdinFDToCloseInParent: FileDescriptor? = nil
 
     switch withStdin {
@@ -170,11 +185,11 @@ public actor DarwinProcess {
 
     // Optional cwd (Darwin extension)
     if let cwd = cd {
-      #if os(macOS)
+#if os(macOS)
       let rc = cwd.withPlatformString { posix_spawn_file_actions_addchdir_np(&actions, $0) }
-      #else
+#else
       let rc = ENOTSUP
-      #endif
+#endif
       if rc != 0 { throw POSIXErrno(rc, fn: "posix_spawn_file_actions_addchdir_np") }
 
     }
@@ -184,7 +199,6 @@ public actor DarwinProcess {
 
     let envpStrings: [String]? = env.map { "\($0.key)=\($0.value)" }
 
-    var pid: pid_t = 0
     let spawnRC: Int32 = try withCStringArray(argvStrings) { argv in
       try withUnsafePointer(to: actions) { actionsPtr in
         if let envpStrings {
@@ -200,18 +214,17 @@ public actor DarwinProcess {
 
     // Parent side: close pipe ends we must not keep open.
     // - For stdout/stderr: close the write ends in the parent (child owns those).
-//    if captureOutput {
-      try stdoutW?.close()
-//    }
+    //    if captureOutput {
+    try stdoutW?.close()
+    //    }
 
     try stderrW.close()
 
     // Parent closes any stdin file FD it opened (child has its own dup2’d copy).
     if let fd = openedStdinFDToCloseInParent { try? fd.close() }
 
-
-    async let stdinDone: Void = {
-      guard let w = stdinWriteFDForParent else { return }
+    feederTask = Task.detached {
+      guard let w = await self.stdinWriteFDForParent else { return }
       defer { try? w.close() }
 
       switch withStdin {
@@ -232,27 +245,58 @@ public actor DarwinProcess {
           }
         default: break
       }
-    }()
+    }
 
+    if captureOutput {
+      readerTask = Task.detached {
+        return try! await self.stdoutR!.readAllBytes()
+      }
+    }
+
+    return pid
 
     // Concurrently:
     // - drain stdout/stderr
     // - wait for exit
     // - (optionally) write stdin then close it to deliver EOF
 
-    async let outBytes: [UInt8] = if captureOutput { Task.detached {
-      try! stdoutR!.readAllBytes()
-    }.value
-    } else { [UInt8]() }
-    async let errBytes: [UInt8] = Task.detached { try! stderrR.readAllBytes() }.value
+  }
+
+  public func run(
+    _ executablePath: String,
+    withStdin: (any Stdinable)? = nil,
+    args arguments: [any Arguable] = [],
+    env : [String : String] = [:],
+    cd : FilePath? = nil,
+    captureOutput: Bool = true
+  ) async throws -> Output {
+
+    let pid = try await launch(
+      executablePath,
+      withStdin: withStdin,
+      args: arguments,
+      env: env,
+      cd: cd,
+      captureOutput: captureOutput
+    )
+
+    return try await value()
+  }
+
+
+
+    public func value() async throws -> Output {
+      if awaitingValue { fatalError("DarwinProcess requested value twice") }
+      awaitingValue = true
+    async let errBytes: [UInt8] = Task.detached { try! await self.stderrR?.readAllBytes() }.value ?? [UInt8]()
     async let status: Int32 = Self.waitForExit(pid: pid)
 
 
-    let (stdout, stderrRaw, terminationStatus, _) = try await (outBytes, errBytes, status, stdinDone)
+    let (stdout, stderrRaw, terminationStatus, _) = try await (readerTask == nil ? [UInt8]() : readerTask!.value, errBytes, status, feederTask!.value)
 
     // Close read ends after drain
     try? stdoutR?.close()
-    try? stderrR.close()
+    try? stderrR?.close()
 
     let stderr = String(decoding: stderrRaw, as: UTF8.self)
     return Output(code: terminationStatus, data: stdout, error: stderr)
