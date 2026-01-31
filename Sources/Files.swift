@@ -1004,6 +1004,14 @@ public extension FileDescriptor {
       throw POSIXErrno(fn: "setPermissions")
     }
   }
+
+  func setTimes(modified: DateTime? = nil, accessed: DateTime? = nil) throws {
+    let omit = timespec(tv_sec: 0, tv_nsec: Int(Darwin.UTIME_OMIT))
+    var times : (timespec, timespec) = ( modified?.timespec ?? omit, accessed?.timespec ?? omit)
+    if futimens( self.rawValue, &times.0) != 0 {
+      throw POSIXErrno(fn: "setTimes")
+    }
+  }
 }
 
 public extension FilePath {
@@ -1012,12 +1020,19 @@ public extension FilePath {
       throw POSIXErrno(fn: "setPermissions")
     }
   }
-}
 
-public extension FilePath {
   func createSymbolicLink(to target: FilePath) throws {
     if 0 != symlink(target.string, self.string) {
       throw POSIXErrno(fn: "createSymbolicLink")
     }
   }
+
+  func setTimes(modified: DateTime? = nil, accessed: DateTime? = nil) throws {
+    let omit = timespec(tv_sec: 0, tv_nsec: Int(Darwin.UTIME_OMIT))
+    var times : (timespec, timespec) = ( modified?.timespec ?? omit, accessed?.timespec ?? omit)
+    if utimensat(AT_FDCWD, self.string, &times.0, AT_SYMLINK_NOFOLLOW ) != 0 {
+      throw POSIXErrno(fn: "setTimes")
+    }
+  }
+
 }
