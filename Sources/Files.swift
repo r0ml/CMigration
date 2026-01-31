@@ -645,9 +645,9 @@ public struct FileMetadata {
   public var flags : FileFlags           // user defined flags for file
   public var generation : UInt           // file generation number
 
-  public init(for f: String, followSymlinks: Bool = true) throws(POSIXErrno) {
+  public init(for f: FilePath, followSymlinks: Bool = true) throws(POSIXErrno) {
     var statbuf = Darwin.stat()
-    let e = (followSymlinks ? stat : lstat)(f, &statbuf)
+    let e = (followSymlinks ? stat : lstat)(f.string, &statbuf)
     try self.init(e == 0 ? 0 : errno, statbuf)
   }
 
