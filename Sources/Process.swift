@@ -140,7 +140,7 @@ public actor DarwinProcess {
   /// - Parameters:
   ///   - stdin: If non-nil, bytes are written to the child process stdin and then stdin is closed.
   public func launch(
-    _ executablePath: String,
+    _ execu: String,
     withStdin: (any Stdinable)? = nil,
     args arguments: [any Arguable] = [],
     env : [String : String] = [:],
@@ -150,6 +150,10 @@ public actor DarwinProcess {
     // Pipes for stdout/stderr (always captured)
     if launched { fatalError("already launched once") }
     launched = true
+
+    guard let executablePath = searchPath(for: execu) else {
+      throw POSIXErrno(2, fn: "launching process")
+    }
 
     // FIXME: as a life-cycle matter, only one "launch" per instance is allowed.
     // also, only "value" per instance is allowed (and it must folow "launch"
