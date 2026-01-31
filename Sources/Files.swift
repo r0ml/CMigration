@@ -35,7 +35,7 @@ import Darwin
 
 extension FilePath {
   public func isRegularFile() throws -> Bool {
-    let statBuf = try FileMetadata(for: self.string)
+    let statBuf = try FileMetadata(for: self)
     return statBuf.filetype == .regular
   }
 }
