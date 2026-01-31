@@ -211,7 +211,7 @@ public actor DarwinProcess {
     }
 
     // Spawn
-    let argvStrings = [executablePath] + arguments.map { $0.asStringArgument() }
+    let argvStrings = [execu] + arguments.map { $0.asStringArgument() }
 
     let envpStrings: [String]? = env.map { "\($0.key)=\($0.value)" }
 
