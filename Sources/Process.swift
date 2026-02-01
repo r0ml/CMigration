@@ -170,7 +170,7 @@ public actor DarwinProcess {
     (stderrR, stderrW) = try FileDescriptor.pipe()
 
     // posix_spawn file actions are optional-opaque on Darwin in Swift
-     let irc = posix_spawn_file_actions_init(&actions)
+    let irc = posix_spawn_file_actions_init(&actions)
     if irc != 0 { throw POSIXErrno(irc, fn: "posix_spawn_file_actions_init") }
 
 
@@ -240,8 +240,8 @@ public actor DarwinProcess {
     // Parent closes any stdin file FD it opened (child has its own dup2’d copy).
     if let fd = openedStdinFDToCloseInParent { try? fd.close() }
 
-    feederTask = Task.detached {
-      guard let w = await self.stdinWriteFDForParent else { return }
+
+    if let w = stdinWriteFDForParent {
       defer {
         try? w.close()
       }
@@ -249,18 +249,20 @@ public actor DarwinProcess {
       switch withStdin {
         case is String:
           let s = withStdin as! String
-          try w.writeAllBytes(Array(s.utf8))
+          feederTask = Task.detached {defer { try? w.close() }; try w.writeAllBytes(Array(s.utf8)) }
         case is Substring:
           let s = String(withStdin as! Substring)
-          try w.writeAllBytes(Array(s.utf8))
+          feederTask = Task.detached { defer { try? w.close() }; try w.writeAllBytes(Array(s.utf8) ) }
         case is [UInt8]:
           let b = withStdin as! [UInt8]
-          try w.writeAllBytes(b)
+            feederTask = Task.detached { defer { try? w.close() }; try w.writeAllBytes(b) }
         case is AsyncStream<[UInt8]>:
           let stream = withStdin as! AsyncStream<[UInt8]>
-          for await chunk in stream {
-            if Task.isCancelled { throw CancellationError() }
-            try w.writeAllBytes(chunk)
+          feederTask = Task.detached {
+            for await chunk in stream {
+              if Task.isCancelled { throw CancellationError() }
+              try w.writeAllBytes(chunk)
+            }
           }
         default: break
       }
