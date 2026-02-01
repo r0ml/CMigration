@@ -169,8 +169,6 @@ public actor DarwinProcess {
     // posix_spawn file actions are optional-opaque on Darwin in Swift
      let irc = posix_spawn_file_actions_init(&actions)
     if irc != 0 { throw POSIXErrno(irc, fn: "posix_spawn_file_actions_init") }
-    defer { posix_spawn_file_actions_destroy(&actions); actions = nil }
-
 
     var openedStdinFDToCloseInParent: FileDescriptor? = nil
 
@@ -188,7 +186,7 @@ public actor DarwinProcess {
         let (r, w) = try FileDescriptor.pipe()
         // Wire child's stdio
         try addDup2AndClose(&actions, from: r.rawValue, to: STDIN_FILENO,  closeSourceInChild: true)
-//        try r.close()
+        try r.close()
         stdinWriteFDForParent = w
       default:
         break
@@ -317,6 +315,10 @@ public actor DarwinProcess {
       awaitingValue = true
     async let errBytes: [UInt8] = Task.detached { try! await self.stderrR?.readAllBytes() }.value ?? [UInt8]()
     async let status: Int32 = Self.waitForExit(pid: pid)
+
+
+      defer { posix_spawn_file_actions_destroy(&actions); actions = nil }
+
 
 
     let (stdout, stderrRaw, terminationStatus, _) = try await (readerTask == nil ? [UInt8]() : readerTask!.value, errBytes, status, feederTask!.value)
