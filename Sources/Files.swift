@@ -889,6 +889,11 @@ public extension FileDescriptor {
 
 // FIXME: Need to harmonize  'readUpToCount', 'readToEnd', and 'readAllBytes'
 extension FileDescriptor {
+  func readAsString() throws -> String {
+    let k = try readAllBytes()
+    return String(decoding: k, as: UTF8.self)
+  }
+
   /// Read all bytes from an already-open FD (files/pipes/sockets).
   /// This is always streaming (mmap doesn’t apply).
   public func readAllBytes() throws -> [UInt8] {

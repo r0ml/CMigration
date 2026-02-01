@@ -108,6 +108,8 @@ public actor DarwinProcess {
   var stderrR : FileDescriptor? = nil
   var feederTask : Task<Void, Error>? = nil
   var readerTask : Task<[UInt8], Error>? = nil
+  var errorTask : Task<String, Error>? = nil
+
   var actions: posix_spawn_file_actions_t? = nil
   var awaitingValue = false
   var launched = false
@@ -266,8 +268,12 @@ public actor DarwinProcess {
 
     if captureOutput {
       readerTask = Task.detached {
-        return try! await self.stdoutR!.readAllBytes()
+        return try await self.stdoutR!.readAllBytes()
       }
+    }
+
+    errorTask = Task.detached {
+      return try await self.stderrR!.readAsString()
     }
 
     return pid
@@ -319,18 +325,15 @@ public actor DarwinProcess {
       if awaitingValue { fatalError("DarwinProcess requested value twice") }
       awaitingValue = true
 
-    async let errBytes: [UInt8] = Task.detached { try! await self.stderrR?.readAllBytes() }.value ?? [UInt8]()
-
       async let status: Int32 = Self.waitForExit(pid: pid)
 
 
-    let (stdout, stderrRaw, terminationStatus, _) = try await (readerTask == nil ? [UInt8]() : readerTask!.value, errBytes, status, feederTask!.value)
+      let (stdout, stderr, terminationStatus, _) = try await (readerTask == nil ? [UInt8]() : readerTask!.value, errorTask!.value, status, feederTask!.value)
 
     // Close read ends after drain
     try? stdoutR?.close()
     try? stderrR?.close()
 
-    let stderr = String(decoding: stderrRaw, as: UTF8.self)
     return Output(code: terminationStatus, data: stdout, error: stderr)
   }
 
