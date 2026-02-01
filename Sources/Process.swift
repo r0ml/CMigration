@@ -325,16 +325,21 @@ public actor DarwinProcess {
       if awaitingValue { fatalError("DarwinProcess requested value twice") }
       awaitingValue = true
 
+
+      async let stdout = readerTask!.value
+      async let stderr = errorTask!.value
+      async let _ = feederTask!.value
       async let status: Int32 = Self.waitForExit(pid: pid)
 
 
-      let (stdout, stderr, terminationStatus, _) = try await (readerTask == nil ? [UInt8]() : readerTask!.value, errorTask!.value, status, feederTask!.value)
+//      let (stdout, stderr, terminationStatus, _) = try await (readerTask == nil ? [UInt8]() : readerTask!.value, errorTask!.value, status, feederTask!.value)
 
-    // Close read ends after drain
-    try? stdoutR?.close()
-    try? stderrR?.close()
 
-    return Output(code: terminationStatus, data: stdout, error: stderr)
+    let res = Output(code: terminationStatus, data: stdout, error: stderr)
+
+      // Close read ends after drain
+      try? stdoutR?.close()
+      try? stderrR?.close()
   }
 
   // MARK: - Helpers
