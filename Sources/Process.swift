@@ -103,6 +103,8 @@ public actor DarwinProcess {
 
   public var pid : pid_t = 0
   var stdinWriteFDForParent: FileDescriptor? = nil
+  var stdinReadFDForParent: FileDescriptor? = nil
+
   var stdoutR : FileDescriptor? = nil
   var stderrR : FileDescriptor? = nil
   var feederTask : Task<Void, Error>? = nil
@@ -169,6 +171,8 @@ public actor DarwinProcess {
     // posix_spawn file actions are optional-opaque on Darwin in Swift
      let irc = posix_spawn_file_actions_init(&actions)
     if irc != 0 { throw POSIXErrno(irc, fn: "posix_spawn_file_actions_init") }
+    defer { posix_spawn_file_actions_destroy(&actions); actions = nil }
+
 
     var openedStdinFDToCloseInParent: FileDescriptor? = nil
 
@@ -183,11 +187,10 @@ public actor DarwinProcess {
         let fd = withStdin as! FileDescriptor
         try addDup2AndClose(&actions, from: fd.rawValue, to: STDIN_FILENO, closeSourceInChild: false)
       case is Substring, is String, is [UInt8], is AsyncStream<[UInt8]>:
-        let (r, w) = try FileDescriptor.pipe()
+        (stdinReadFDForParent, stdinWriteFDForParent) = try FileDescriptor
+          .pipe()
         // Wire child's stdio
-        try addDup2AndClose(&actions, from: r.rawValue, to: STDIN_FILENO,  closeSourceInChild: true)
-        try r.close()
-        stdinWriteFDForParent = w
+        try addDup2AndClose(&actions, from: stdinReadFDForParent!.rawValue, to: STDIN_FILENO,  closeSourceInChild: true)
       default:
         break
     }
@@ -226,6 +229,8 @@ public actor DarwinProcess {
     }
     if spawnRC != 0 { throw POSIXErrno(spawnRC, fn: "posix_spawn") }
 
+    try stdinReadFDForParent?.close()
+
     // Parent side: close pipe ends we must not keep open.
     // - For stdout/stderr: close the write ends in the parent (child owns those).
     //    if captureOutput {
@@ -239,7 +244,9 @@ public actor DarwinProcess {
 
     feederTask = Task.detached {
       guard let w = await self.stdinWriteFDForParent else { return }
-      defer { try? w.close() }
+      defer {
+        try? w.close()
+      }
 
       switch withStdin {
         case is String:
@@ -315,10 +322,6 @@ public actor DarwinProcess {
       awaitingValue = true
     async let errBytes: [UInt8] = Task.detached { try! await self.stderrR?.readAllBytes() }.value ?? [UInt8]()
     async let status: Int32 = Self.waitForExit(pid: pid)
-
-
-      defer { posix_spawn_file_actions_destroy(&actions); actions = nil }
-
 
 
     let (stdout, stderrRaw, terminationStatus, _) = try await (readerTask == nil ? [UInt8]() : readerTask!.value, errBytes, status, feederTask!.value)
