@@ -195,6 +195,11 @@ public actor DarwinProcess {
           .pipe()
         // Wire child's stdio
         try addDup2AndClose(&actions, from: openedStdinFDToCloseInParent!.rawValue, to: STDIN_FILENO,  closeSourceInChild: true)
+
+        let rcCloseWrite = posix_spawn_file_actions_addclose(&actions, stdinWriteFDForParent!.rawValue)
+        if rcCloseWrite != 0 { throw POSIXErrno(rcCloseWrite, fn: "posix_spawn_file_actions_addclose(stdin write)") }
+
+
       default:
         break
     }
@@ -203,6 +208,17 @@ public actor DarwinProcess {
       try addDup2AndClose(&actions, from: stdoutW!.rawValue, to: STDOUT_FILENO, closeSourceInChild: true)
     }
     try addDup2AndClose(&actions, from: stderrW.rawValue, to: STDERR_FILENO, closeSourceInChild: true)
+
+
+    if let r = stdoutR {
+        let rc = posix_spawn_file_actions_addclose(&actions, r.rawValue)
+        if rc != 0 { throw POSIXErrno(rc, fn: "posix_spawn_file_actions_addclose(stdout read)") }
+      }
+      if let r = stderrR {
+        let rc = posix_spawn_file_actions_addclose(&actions, r.rawValue)
+        if rc != 0 { throw POSIXErrno(rc, fn: "posix_spawn_file_actions_addclose(stderr read)") }
+      }
+
 
     // Optional cwd (Darwin extension)
     if let cwd = cd {
@@ -349,7 +365,7 @@ public actor DarwinProcess {
 
 
       async let status: Int32 = waitForExit(pid: pid)
-      async let _ = feederTask!.value
+      async let _ = feederTask?.value
       async let stderr = errorTask!.value
       async let stdout = readerTask!.value
 
