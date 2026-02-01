@@ -103,7 +103,6 @@ public actor DarwinProcess {
 
   public var pid : pid_t = 0
   var stdinWriteFDForParent: FileDescriptor? = nil
-  var stdinReadFDForParent: FileDescriptor? = nil
 
   var stdoutR : FileDescriptor? = nil
   var stderrR : FileDescriptor? = nil
@@ -187,10 +186,10 @@ public actor DarwinProcess {
         let fd = withStdin as! FileDescriptor
         try addDup2AndClose(&actions, from: fd.rawValue, to: STDIN_FILENO, closeSourceInChild: false)
       case is Substring, is String, is [UInt8], is AsyncStream<[UInt8]>:
-        (stdinReadFDForParent, stdinWriteFDForParent) = try FileDescriptor
+        (openedStdinFDToCloseInParent, stdinWriteFDForParent) = try FileDescriptor
           .pipe()
         // Wire child's stdio
-        try addDup2AndClose(&actions, from: stdinReadFDForParent!.rawValue, to: STDIN_FILENO,  closeSourceInChild: true)
+        try addDup2AndClose(&actions, from: openedStdinFDToCloseInParent!.rawValue, to: STDIN_FILENO,  closeSourceInChild: true)
       default:
         break
     }
@@ -228,8 +227,6 @@ public actor DarwinProcess {
       }
     }
     if spawnRC != 0 { throw POSIXErrno(spawnRC, fn: "posix_spawn") }
-
-    try stdinReadFDForParent?.close()
 
     // Parent side: close pipe ends we must not keep open.
     // - For stdout/stderr: close the write ends in the parent (child owns those).
@@ -320,8 +317,10 @@ public actor DarwinProcess {
     public func value() async throws -> Output {
       if awaitingValue { fatalError("DarwinProcess requested value twice") }
       awaitingValue = true
+
     async let errBytes: [UInt8] = Task.detached { try! await self.stderrR?.readAllBytes() }.value ?? [UInt8]()
-    async let status: Int32 = Self.waitForExit(pid: pid)
+
+      async let status: Int32 = Self.waitForExit(pid: pid)
 
 
     let (stdout, stderrRaw, terminationStatus, _) = try await (readerTask == nil ? [UInt8]() : readerTask!.value, errBytes, status, feederTask!.value)
