@@ -255,7 +255,11 @@ public actor DarwinProcess {
           let s = withStdin as! String
           feederTask = Task.detached {defer { try? w.close(); logger.info("input closed") };
             logger.info("start input")
-            try w.writeAllBytes(Array(s.utf8))
+            do {
+              try w.writeAllBytes(Array(s.utf8))
+            } catch(let e) {
+              logger.error("\(e.localizedDescription)")
+            }
             logger.info("end input")
           }
 
