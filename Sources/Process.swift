@@ -188,7 +188,7 @@ public actor DarwinProcess {
         let (r, w) = try FileDescriptor.pipe()
         // Wire child's stdio
         try addDup2AndClose(&actions, from: r.rawValue, to: STDIN_FILENO,  closeSourceInChild: true)
-        try r.close()
+//        try r.close()
         stdinWriteFDForParent = w
       default:
         break
