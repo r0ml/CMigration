@@ -335,11 +335,13 @@ public actor DarwinProcess {
 //      let (stdout, stderr, terminationStatus, _) = try await (readerTask == nil ? [UInt8]() : readerTask!.value, errorTask!.value, status, feederTask!.value)
 
 
-    let res = Output(code: terminationStatus, data: stdout, error: stderr)
+    let res = try await Output(code: status, data: stdout, error: stderr)
 
       // Close read ends after drain
       try? stdoutR?.close()
       try? stderrR?.close()
+
+      return res
   }
 
   // MARK: - Helpers
