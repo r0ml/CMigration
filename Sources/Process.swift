@@ -4,10 +4,6 @@
 import SystemPackage
 import Darwin
 
-import os
-
-let logger = Logger(subsystem: "r0ml", category: "r0ml")
-
 public struct Environment {
   /// Return the value of the environment variable given as argument.  Return `nil` if the environment variable is not set
 /*  public static func getenv(_ name: String) -> String? {
@@ -265,18 +261,14 @@ public actor DarwinProcess {
     if captureOutput {
       let so = stdoutR!
       readerTask = Task.detached {
-        logger.info("reader starts")
         let res = try so.readAllBytes()
-        logger.info("reader ends")
         return res
       }
     }
 
     let se = stderrR!
     errorTask = Task.detached {
-      logger.info("error reader starts")
       let res = try se.readAsString()
-      logger.info("error reader ends")
       return res
     }
 
@@ -285,14 +277,8 @@ public actor DarwinProcess {
       switch withStdin {
         case is String:
           let s = withStdin as! String
-          feederTask = Task.detached {defer { try? w.close(); logger.info("input closed") };
-            logger.info("start input")
-            do {
-              try w.writeAllBytes(Array(s.utf8))
-            } catch(let e) {
-              logger.error("\(e.localizedDescription)")
-            }
-            logger.info("end input")
+          feederTask = Task.detached {defer { try? w.close() }
+            try w.writeAllBytes(Array(s.utf8))
           }
 
         case is Substring:
@@ -391,9 +377,7 @@ public actor DarwinProcess {
     try await Task.detached {
       var status: Int32 = 0
       while true {
-        logger.info("waiting for pid")
         let w = Darwin.waitpid(pid, &status, 0)
-        logger.info("pid wait ended")
         if w == -1 {
           if errno == EINTR { continue }
           throw POSIXErrno(fn: "waitpid")
