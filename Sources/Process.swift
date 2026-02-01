@@ -255,8 +255,9 @@ public actor DarwinProcess {
           let s = withStdin as! String
           feederTask = Task.detached {defer { try? w.close(); logger.info("input closed") };
             logger.info("start input")
-            try w.writeAllBytes(Array(s.utf8)) }
-          logger.info("end input")
+            try w.writeAllBytes(Array(s.utf8))
+            logger.info("end input")
+          }
 
         case is Substring:
           let s = String(withStdin as! Substring)
