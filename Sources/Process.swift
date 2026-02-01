@@ -246,6 +246,25 @@ public actor DarwinProcess {
     if let fd = openedStdinFDToCloseInParent { try? fd.close() }
 
 
+    if captureOutput {
+      let so = stdoutR!
+      readerTask = Task.detached {
+        logger.info("reader starts")
+        let res = try so.readAllBytes()
+        logger.info("reader ends")
+        return res
+      }
+    }
+
+    let se = stderrR!
+    errorTask = Task.detached {
+      logger.info("error reader starts")
+      let res = try se.readAsString()
+      logger.info("error reader ends")
+      return res
+    }
+
+
     if let w = stdinWriteFDForParent {
       switch withStdin {
         case is String:
@@ -277,24 +296,6 @@ public actor DarwinProcess {
           }
         default: break
       }
-    }
-
-    let so = stdoutR!
-    if captureOutput {
-      readerTask = Task.detached {
-        logger.info("reader starts")
-        let res = try so.readAllBytes()
-        logger.info("reader ends")
-        return res
-      }
-    }
-
-    let se = stderrR!
-    errorTask = Task.detached {
-      logger.info("error reader starts")
-      let res = try se.readAsString()
-      logger.info("error reader ends")
-      return res
     }
 
     return pid
