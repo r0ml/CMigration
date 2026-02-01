@@ -218,7 +218,8 @@ public actor DarwinProcess {
     // Spawn
     let argvStrings = [execu] + arguments.map { $0.asStringArgument() }
 
-    let envpStrings: [String]? = env.map { "\($0.key)=\($0.value)" }
+    let nv = Environment.getenv().merging(env, uniquingKeysWith: { lhs, rhs in rhs} )
+    let envpStrings: [String]? = nv.map { "\($0.key)=\($0.value)" }
 
     let spawnRC: Int32 = try withCStringArray(argvStrings) { argv in
       try withUnsafePointer(to: actions) { actionsPtr in
@@ -268,6 +269,7 @@ public actor DarwinProcess {
         case is AsyncStream<[UInt8]>:
           let stream = withStdin as! AsyncStream<[UInt8]>
           feederTask = Task.detached {
+            defer { try? w.close() }
             for await chunk in stream {
               if Task.isCancelled { throw CancellationError() }
               try w.writeAllBytes(chunk)
