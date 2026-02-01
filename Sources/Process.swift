@@ -246,10 +246,6 @@ public actor DarwinProcess {
 
 
     if let w = stdinWriteFDForParent {
-      defer {
-        try? w.close()
-      }
-
       switch withStdin {
         case is String:
           let s = withStdin as! String
