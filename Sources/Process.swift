@@ -266,14 +266,16 @@ public actor DarwinProcess {
       }
     }
 
+    let so = stdoutR!
     if captureOutput {
       readerTask = Task.detached {
-        return try await self.stdoutR!.readAllBytes()
+        return try so.readAllBytes()
       }
     }
 
+    let se = stderrR!
     errorTask = Task.detached {
-      return try await self.stderrR!.readAsString()
+      return try se.readAsString()
     }
 
     return pid
