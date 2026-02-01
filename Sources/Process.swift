@@ -348,10 +348,10 @@ public actor DarwinProcess {
       awaitingValue = true
 
 
-      async let stdout = readerTask!.value
-      async let stderr = errorTask!.value
-      async let _ = feederTask!.value
       async let status: Int32 = waitForExit(pid: pid)
+      async let _ = feederTask!.value
+      async let stderr = errorTask!.value
+      async let stdout = readerTask!.value
 
 
 //      let (stdout, stderr, terminationStatus, _) = try await (readerTask == nil ? [UInt8]() : readerTask!.value, errorTask!.value, status, feederTask!.value)
