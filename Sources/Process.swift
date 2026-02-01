@@ -4,6 +4,10 @@
 import SystemPackage
 import Darwin
 
+import os
+
+let logger = Logger(subsystem: "r0ml", category: "r0ml")
+
 public struct Environment {
   /// Return the value of the environment variable given as argument.  Return `nil` if the environment variable is not set
 /*  public static func getenv(_ name: String) -> String? {
@@ -249,7 +253,11 @@ public actor DarwinProcess {
       switch withStdin {
         case is String:
           let s = withStdin as! String
-          feederTask = Task.detached {defer { try? w.close() }; try w.writeAllBytes(Array(s.utf8)) }
+          feederTask = Task.detached {defer { try? w.close(); logger.info("input closed") };
+            logger.info("start input")
+            try w.writeAllBytes(Array(s.utf8)) }
+          logger.info("end input")
+
         case is Substring:
           let s = String(withStdin as! Substring)
           feederTask = Task.detached { defer { try? w.close() }; try w.writeAllBytes(Array(s.utf8) ) }
@@ -271,13 +279,19 @@ public actor DarwinProcess {
     let so = stdoutR!
     if captureOutput {
       readerTask = Task.detached {
-        return try so.readAllBytes()
+        logger.info("reader starts")
+        let res = try so.readAllBytes()
+        logger.info("reader ends")
+        return res
       }
     }
 
     let se = stderrR!
     errorTask = Task.detached {
-      return try se.readAsString()
+      logger.info("error reader starts")
+      let res = try se.readAsString()
+      logger.info("error reader ends")
+      return res
     }
 
     return pid
@@ -309,7 +323,7 @@ public actor DarwinProcess {
     captureOutput: Bool = true
   ) async throws -> Output {
 
-    let pid = try launch(
+    let _ = try launch(
       executablePath,
       withStdin: withStdin,
       args: arguments,
@@ -333,7 +347,7 @@ public actor DarwinProcess {
       async let stdout = readerTask!.value
       async let stderr = errorTask!.value
       async let _ = feederTask!.value
-      async let status: Int32 = Self.waitForExit(pid: pid)
+      async let status: Int32 = waitForExit(pid: pid)
 
 
 //      let (stdout, stderr, terminationStatus, _) = try await (readerTask == nil ? [UInt8]() : readerTask!.value, errorTask!.value, status, feederTask!.value)
@@ -353,11 +367,13 @@ public actor DarwinProcess {
 
 
 
-  private static func waitForExit(pid: pid_t) async throws -> Int32 {
+  private func waitForExit(pid: pid_t) async throws -> Int32 {
     try await Task.detached {
       var status: Int32 = 0
       while true {
+        logger.info("waiting for pid")
         let w = Darwin.waitpid(pid, &status, 0)
+        logger.info("pid wait ended")
         if w == -1 {
           if errno == EINTR { continue }
           throw POSIXErrno(fn: "waitpid")
