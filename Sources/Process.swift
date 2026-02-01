@@ -170,7 +170,6 @@ public actor DarwinProcess {
     // posix_spawn file actions are optional-opaque on Darwin in Swift
      let irc = posix_spawn_file_actions_init(&actions)
     if irc != 0 { throw POSIXErrno(irc, fn: "posix_spawn_file_actions_init") }
-    defer { posix_spawn_file_actions_destroy(&actions); actions = nil }
 
 
     var openedStdinFDToCloseInParent: FileDescriptor? = nil
@@ -315,6 +314,8 @@ public actor DarwinProcess {
 
 
     public func value() async throws -> Output {
+      defer { posix_spawn_file_actions_destroy(&actions); actions = nil }
+
       if awaitingValue { fatalError("DarwinProcess requested value twice") }
       awaitingValue = true
 
