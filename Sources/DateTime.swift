@@ -34,8 +34,6 @@ public struct DateTime {
     var tm = tm()
     memset(&tm, 0, MemoryLayout<tm>.size)
 
-    let cstr = s.cString(using: .utf8)!
-
     // Try full date-time with optional 'Z'
     let formats = [
       "%Y-%m-%dT%H:%M:%SZ",
@@ -45,7 +43,7 @@ public struct DateTime {
 
     var parsed = false
     for fmt in formats {
-      if strptime(cstr, fmt, &tm) != nil {
+      if strptime(s, fmt, &tm) != nil {
         parsed = true
         break
       }
