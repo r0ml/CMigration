@@ -4,6 +4,19 @@
 import SystemPackage
 import Darwin
 
+import os
+
+let logger = Logger(subsystem: "CMigration", category: "Process")
+
+func log(_ message: String) {
+  logger.info("\(message)")
+}
+
+func log(_ message: POSIXErrno) -> POSIXErrno {
+  logger.error("\(message.localizedDescription)")
+  return message
+}
+
 public struct Environment {
   /// Return the value of the environment variable given as argument.  Return `nil` if the environment variable is not set
 /*  public static func getenv(_ name: String) -> String? {
@@ -21,6 +34,13 @@ public struct Environment {
     } else {
       return nil
     }
+    }
+    set {
+      if let newValue {
+        Darwin.setenv(name, newValue, 1)
+      } else {
+        Darwin.unsetenv(name)
+      }
     }
   }
 
@@ -47,7 +67,7 @@ public struct Environment {
   public static func setenv(_ name : String, _ value: String) throws(POSIXErrno) {
     let k = Darwin.setenv(name, value, 1)
     if k == -1 {
-      throw POSIXErrno()
+      throw POSIXErrno(fn: "setenv")
     }
   }
 
@@ -55,7 +75,7 @@ public struct Environment {
   public static func unsetenv(_ name : String) throws(POSIXErrno) {
     let k = Darwin.unsetenv(name)
     if k == -1 {
-      throw POSIXErrno()
+      throw POSIXErrno(fn: "unsetenv")
     }
   }
 
@@ -128,6 +148,18 @@ public actor DarwinProcess {
    }
    */
 
+  public static func launch(
+    _ executablePath: String,
+    withStdin: (any Stdinable)? = nil,
+    args arguments: any Arguable...,
+    env : [String : String] = [:],
+    cd : FilePath? = nil,
+    captureOutput: Bool = true
+  ) async throws(POSIXErrno) -> DarwinProcess {
+    let p = DarwinProcess()
+    let _ = try await p.launch(executablePath, withStdin: withStdin, args: arguments, env: env, cd: cd, captureOutput: captureOutput)
+    return p
+  }
 
   public func launch(
     _ executablePath: String,
@@ -136,7 +168,7 @@ public actor DarwinProcess {
     env : [String : String] = [:],
     cd : FilePath? = nil,
     captureOutput: Bool = true
-  ) throws -> pid_t {
+  ) throws(POSIXErrno) -> pid_t {
     return try launch(executablePath, withStdin: withStdin, args: arguments, env: env, cd: cd, captureOutput: captureOutput)
   }
 
@@ -149,7 +181,7 @@ public actor DarwinProcess {
     env : [String : String] = [:],
     cd : FilePath? = nil,
     captureOutput: Bool = true
-  ) throws -> pid_t {
+  ) throws(POSIXErrno) -> pid_t {
     // Pipes for stdout/stderr (always captured)
     if launched { fatalError("already launched once") }
     launched = true
@@ -165,14 +197,28 @@ public actor DarwinProcess {
     var stderrW : FileDescriptor
 
     if captureOutput {
-      (stdoutR, stdoutW) = try FileDescriptor.pipe()
+      do {
+        (stdoutR, stdoutW) = try FileDescriptor.pipe()
+      } catch(let e as Errno) {
+        throw log(POSIXErrno(e.rawValue, fn: "pipe", reason: "creating stdout pipe"))
+      } catch(let e) {
+        throw log(POSIXErrno(-1, fn: "pipe", reason: "creating stdout pipe: \(e)"))
+      }
     }
-    (stderrR, stderrW) = try FileDescriptor.pipe()
+
+    do {
+      (stderrR, stderrW) = try FileDescriptor.pipe()
+    } catch(let e as Errno) {
+      throw log(POSIXErrno(e.rawValue, fn: "pipe", reason: "creating stderr pipe"))
+    } catch(let e) {
+      throw log(POSIXErrno(-1, fn: "pipe", reason: "creating stderr pipe: \(e)"))
+    }
 
     // posix_spawn file actions are optional-opaque on Darwin in Swift
     let irc = posix_spawn_file_actions_init(&actions)
-    if irc != 0 { throw POSIXErrno(irc, fn: "posix_spawn_file_actions_init") }
-
+    if irc != 0 {
+      throw log(POSIXErrno(irc, fn: "posix_spawn_file_actions_init"))
+    }
 
     var openedStdinFDToCloseInParent: FileDescriptor? = nil
 
@@ -180,40 +226,61 @@ public actor DarwinProcess {
 
       case is FilePath:
         let fp = withStdin as! FilePath
-        let fd = try FileDescriptor.open(fp, .readOnly)
-        openedStdinFDToCloseInParent = fd
-        try addDup2AndClose(&actions, from: fd.rawValue, to: STDIN_FILENO, closeSourceInChild: false)
+        do {
+          let fd = try FileDescriptor.open(fp, .readOnly)
+          openedStdinFDToCloseInParent = fd
+          try addDup2AndClose(&actions, from: fd.rawValue, to: STDIN_FILENO, closeSourceInChild: false)
+        } catch(let e as Errno) {
+          throw log(POSIXErrno(e.rawValue, fn: "open(\(fp))", reason: "setting stdin to FilePath"))
+        } catch(let e) {
+          throw log(POSIXErrno(-1, fn: "open(\(fp))", reason: "setting stdin to FilePath: \(e)"))
+        }
       case is FileDescriptor:
-        let fd = withStdin as! FileDescriptor
-        try addDup2AndClose(&actions, from: fd.rawValue, to: STDIN_FILENO, closeSourceInChild: false)
+        do {
+          let fd = withStdin as! FileDescriptor
+          try addDup2AndClose(&actions, from: fd.rawValue, to: STDIN_FILENO, closeSourceInChild: false)
+        } catch(let e as Errno) {
+          throw log(POSIXErrno(e.rawValue, reason: "setting stdin to FileDescriptor" ))
+        } catch(let e) {
+          throw log(POSIXErrno(-1, reason: "setting stdin to FileDescriptor: \(e)"))
+        }
       case is Substring, is String, is [UInt8], is AsyncStream<[UInt8]>:
-        (openedStdinFDToCloseInParent, stdinWriteFDForParent) = try FileDescriptor
-          .pipe()
-        // Wire child's stdio
-        try addDup2AndClose(&actions, from: openedStdinFDToCloseInParent!.rawValue, to: STDIN_FILENO,  closeSourceInChild: true)
+        do {
+          (openedStdinFDToCloseInParent, stdinWriteFDForParent) = try FileDescriptor.pipe()
+          // Wire child's stdio
+          try addDup2AndClose(&actions, from: openedStdinFDToCloseInParent!.rawValue, to: STDIN_FILENO,  closeSourceInChild: true)
 
-        let rcCloseWrite = posix_spawn_file_actions_addclose(&actions, stdinWriteFDForParent!.rawValue)
-        if rcCloseWrite != 0 { throw POSIXErrno(rcCloseWrite, fn: "posix_spawn_file_actions_addclose(stdin write)") }
-
+          let rcCloseWrite = posix_spawn_file_actions_addclose(&actions, stdinWriteFDForParent!.rawValue)
+          if rcCloseWrite != 0 { throw log(POSIXErrno(rcCloseWrite, fn: "posix_spawn_file_actions_addclose(stdin write)")) }
+        } catch(let e as Errno) {
+          throw log(POSIXErrno(e.rawValue, reason: "setting stdin to strings"))
+        } catch(let e) {
+          throw log(POSIXErrno(-1, reason: "setting stdin to strings: \(e)"))
+        }
 
       default:
         break
     }
 
-    if captureOutput {
-      try addDup2AndClose(&actions, from: stdoutW!.rawValue, to: STDOUT_FILENO, closeSourceInChild: true)
+    do {
+      if captureOutput {
+        try addDup2AndClose(&actions, from: stdoutW!.rawValue, to: STDOUT_FILENO, closeSourceInChild: true)
+      }
+      try addDup2AndClose(&actions, from: stderrW.rawValue, to: STDERR_FILENO, closeSourceInChild: true)
+    } catch(let e as Errno) {
+      throw log(POSIXErrno(e.rawValue, fn: "addDup2AndClose", reason: "redirecting stdio"))
+    } catch(let e) {
+      throw log(POSIXErrno(-1, fn: "addDup2AndClose", reason: "redirecting stdio: \(e)"))
     }
-    try addDup2AndClose(&actions, from: stderrW.rawValue, to: STDERR_FILENO, closeSourceInChild: true)
-
 
     if let r = stdoutR {
-        let rc = posix_spawn_file_actions_addclose(&actions, r.rawValue)
-        if rc != 0 { throw POSIXErrno(rc, fn: "posix_spawn_file_actions_addclose(stdout read)") }
-      }
-      if let r = stderrR {
-        let rc = posix_spawn_file_actions_addclose(&actions, r.rawValue)
-        if rc != 0 { throw POSIXErrno(rc, fn: "posix_spawn_file_actions_addclose(stderr read)") }
-      }
+      let rc = posix_spawn_file_actions_addclose(&actions, r.rawValue)
+      if rc != 0 { throw log(POSIXErrno(rc, fn: "posix_spawn_file_actions_addclose(stdout read)")) }
+    }
+    if let r = stderrR {
+      let rc = posix_spawn_file_actions_addclose(&actions, r.rawValue)
+      if rc != 0 { throw log(POSIXErrno(rc, fn: "posix_spawn_file_actions_addclose(stderr read)")) }
+    }
 
 
     // Optional cwd (Darwin extension)
@@ -223,7 +290,7 @@ public actor DarwinProcess {
 #else
       let rc = ENOTSUP
 #endif
-      if rc != 0 { throw POSIXErrno(rc, fn: "posix_spawn_file_actions_addchdir_np") }
+      if rc != 0 { throw log(POSIXErrno(rc, fn: "posix_spawn_file_actions_addchdir_np")) }
 
     }
 
@@ -233,26 +300,41 @@ public actor DarwinProcess {
     let nv = Environment.getenv().merging(env, uniquingKeysWith: { lhs, rhs in rhs} )
     let envpStrings: [String]? = nv.map { "\($0.key)=\($0.value)" }
 
-    let spawnRC: Int32 = try withCStringArray(argvStrings) { argv in
-      try withUnsafePointer(to: actions) { actionsPtr in
-        if let envpStrings {
-          return try withCStringArray(envpStrings) { envp in
-            posix_spawn(&pid, executablePath, actionsPtr, nil, argv, envp)
+    do {
+      let spawnRC: Int32 = try withCStringArray(argvStrings) { argv in
+        try withUnsafePointer(to: actions) { actionsPtr in
+          if let envpStrings {
+            return try withCStringArray(envpStrings) { envp in
+              posix_spawn(&pid, executablePath, actionsPtr, nil, argv, envp)
+            }
+          } else {
+            return posix_spawn(&pid, executablePath, actionsPtr, nil, argv, environ)
           }
-        } else {
-          return posix_spawn(&pid, executablePath, actionsPtr, nil, argv, environ)
         }
       }
+      if spawnRC != 0 {
+        throw log(POSIXErrno(spawnRC, fn: "posix_spawn"))
+      }
+    } catch(let e as Errno) {
+      throw log(POSIXErrno(e.rawValue, fn: "posix_spawn") )
+    } catch(let e as POSIXErrno) {
+      throw e
+    } catch(let e) {
+      throw log(POSIXErrno(-1, fn: "posix_spawn", reason: "\(e)"))
     }
-    if spawnRC != 0 { throw POSIXErrno(spawnRC, fn: "posix_spawn") }
-
     // Parent side: close pipe ends we must not keep open.
     // - For stdout/stderr: close the write ends in the parent (child owns those).
-    //    if captureOutput {
-    try stdoutW?.close()
-    //    }
 
-    try stderrW.close()
+
+
+    do {
+      try stdoutW?.close()
+      try stderrW.close()
+    } catch(let e as Errno) {
+      let p = POSIXErrno(e.rawValue, fn: "close", reason: "closing stderrW or stdoutW" )
+    } catch(let e) {
+      let p = POSIXErrno(-1, fn: "close", reason: "closing stderrW or stdoutW: \(e)" )
+    }
 
     // Parent closes any stdin file FD it opened (child has its own dup2’d copy).
     if let fd = openedStdinFDToCloseInParent { try? fd.close() }
@@ -286,7 +368,7 @@ public actor DarwinProcess {
           feederTask = Task.detached { defer { try? w.close() }; try w.writeAllBytes(Array(s.utf8) ) }
         case is [UInt8]:
           let b = withStdin as! [UInt8]
-            feederTask = Task.detached { defer { try? w.close() }; try w.writeAllBytes(b) }
+          feederTask = Task.detached { defer { try? w.close() }; try w.writeAllBytes(b) }
         case is AsyncStream<[UInt8]>:
           let stream = withStdin as! AsyncStream<[UInt8]>
           feederTask = Task.detached {
@@ -343,30 +425,30 @@ public actor DarwinProcess {
 
 
 
-    public func value() async throws -> Output {
-      defer { posix_spawn_file_actions_destroy(&actions); actions = nil }
+  public func value() async throws -> Output {
+    defer { posix_spawn_file_actions_destroy(&actions); actions = nil }
 
-      if awaitingValue { fatalError("DarwinProcess requested value twice") }
-      awaitingValue = true
-
-
-      async let status: Int32 = waitForExit(pid: pid)
-      async let _ = feederTask?.value
-      async let stderr = errorTask!.value
-
-      async let stdout = readerTask?.value ?? [UInt8]()
+    if awaitingValue { fatalError("DarwinProcess requested value twice") }
+    awaitingValue = true
 
 
-//      let (stdout, stderr, terminationStatus, _) = try await (readerTask == nil ? [UInt8]() : readerTask!.value, errorTask!.value, status, feederTask!.value)
+    async let status: Int32 = waitForExit(pid: pid)
+    async let _ = feederTask?.value
+    async let stderr = errorTask!.value
+
+    async let stdout = readerTask?.value ?? [UInt8]()
+
+
+    //      let (stdout, stderr, terminationStatus, _) = try await (readerTask == nil ? [UInt8]() : readerTask!.value, errorTask!.value, status, feederTask!.value)
 
 
     let res = try await Output(code: status, data: stdout, error: stderr)
 
-      // Close read ends after drain
-      try? stdoutR?.close()
-      try? stderrR?.close()
+    // Close read ends after drain
+    try? stdoutR?.close()
+    try? stderrR?.close()
 
-      return res
+    return res
   }
 
   // MARK: - Helpers
@@ -409,25 +491,26 @@ public actor DarwinProcess {
       if rc2 != 0 { throw POSIXErrno(rc2, fn: "posix_spawn_file_actions_addclose") }
     }
   }
-}
 
-private func withCStringArray<R>(
+
+  private func withCStringArray<R>(
     _ strings: [String],
     _ body: ([UnsafeMutablePointer<CChar>?]) throws -> R
-) throws -> R {
+  ) throws -> R {
     var cStrings: [UnsafeMutablePointer<CChar>?] = []
     cStrings.reserveCapacity(strings.count + 1)
 
     for s in strings {
-        cStrings.append(strdup(s))
+      cStrings.append(strdup(s))
     }
     cStrings.append(nil)
 
     defer {
-        for p in cStrings where p != nil { free(p) }
+      for p in cStrings where p != nil { free(p) }
     }
 
     return try body(cStrings)
+  }
 }
 
 // ===================================================================================================
