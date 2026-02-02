@@ -131,6 +131,7 @@ public actor DarwinProcess {
   var errorTask : Task<String, Error>? = nil
 
   var actions: posix_spawn_file_actions_t? = nil
+  var attr: posix_spawnattr_t? = nil
   var awaitingValue = false
   var launched = false
 
@@ -300,15 +301,43 @@ public actor DarwinProcess {
     let nv = Environment.getenv().merging(env, uniquingKeysWith: { lhs, rhs in rhs} )
     let envpStrings: [String]? = nv.map { "\($0.key)=\($0.value)" }
 
+
+
+    // 1️⃣ Initialize
+    guard posix_spawnattr_init(&attr) == 0 else {
+      throw log(POSIXErrno(fn: "posix_spawnattr_init"))
+    }
+    defer {
+      posix_spawnattr_destroy(&attr)
+    }
+    var flags: Int16 = 0
+    flags |= Int16(POSIX_SPAWN_SETSIGDEF)
+    flags |= Int16(POSIX_SPAWN_SETSIGMASK)
+    flags |= Int16(POSIX_SPAWN_CLOEXEC_DEFAULT)
+
+    guard posix_spawnattr_setflags(&attr, flags) == 0 else {
+      throw log(POSIXErrno(fn: "posix_spawnattr_setflags"))
+    }
+
+    var sig = sigset_t()
+    sigemptyset(&sig)
+    posix_spawnattr_setsigdefault(&attr, &sig)
+    posix_spawnattr_setsigmask(&attr, &sig)
+
+
+
+
     do {
       let spawnRC: Int32 = try withCStringArray(argvStrings) { argv in
         try withUnsafePointer(to: actions) { actionsPtr in
-          if let envpStrings {
-            return try withCStringArray(envpStrings) { envp in
-              posix_spawn(&pid, executablePath, actionsPtr, nil, argv, envp)
+          try withUnsafePointer(to: attr) { attrPtr in
+            if let envpStrings {
+              return try withCStringArray(envpStrings) { envp in
+                posix_spawn(&pid, executablePath, actionsPtr, attrPtr, argv, envp)
+              }
+            } else {
+              return posix_spawn(&pid, executablePath, actionsPtr, attrPtr, argv, environ)
             }
-          } else {
-            return posix_spawn(&pid, executablePath, actionsPtr, nil, argv, environ)
           }
         }
       }
