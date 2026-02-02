@@ -1032,6 +1032,12 @@ public extension FilePath {
     }
   }
 
+  func createHardLink(to target: FilePath) throws {
+    if 0 != Darwin.linkat(AT_FDCWD, self.string, AT_FDCWD, target.string, Darwin.AT_SYMLINK_NOFOLLOW) {
+      throw POSIXErrno(fn: "linkat")
+    }
+  }
+
   func setTimes(modified: DateTime? = nil, accessed: DateTime? = nil) throws {
     let omit = timespec(tv_sec: 0, tv_nsec: Int(Darwin.UTIME_OMIT))
     var times : (timespec, timespec) = ( modified?.timespec ?? omit, accessed?.timespec ?? omit)
