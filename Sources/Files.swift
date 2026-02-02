@@ -829,9 +829,9 @@ public extension FilePath {
         }
       }
 
-//      if !includeDotEntries, (name == "." || name == "..") {
-//        continue
-//      }
+      if name == "." || name == ".." {
+        continue
+      }
 
       // Build a child path: dir/<name>
       results.append(name)
