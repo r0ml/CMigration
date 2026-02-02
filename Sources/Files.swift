@@ -1041,3 +1041,25 @@ public extension FilePath {
   }
 
 }
+
+public extension FilePath {
+  func removeTree() throws {
+    if !self.exists { return }
+    let st = try FileMetadata(for: self)
+    if st.filetype == .directory {
+      let j = try self.listDirectory()
+      for i in j {
+        try self.appending(i).removeTree()
+      }
+      if rmdir(self.string) != 0 {
+        throw POSIXErrno(fn: "rmdir")
+      }
+    } else {
+      // file, symlink, fifo, socket, etc.
+      if unlink(self.string) != 0 {
+        throw POSIXErrno(fn: "unlink")
+      }
+    }
+  }
+}
+
