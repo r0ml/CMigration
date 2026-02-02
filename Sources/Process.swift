@@ -110,6 +110,13 @@ extension FilePath : Arguable {
 }
 
 
+extension FileDescriptor {
+  func setCloexec() {
+    let flags = Darwin.fcntl(self.rawValue, F_GETFD)
+    _ = fcntl(self.rawValue, F_SETFD, flags | FD_CLOEXEC)
+  }
+}
+
 public actor DarwinProcess {
 
   public struct Output : Sendable {
@@ -215,6 +222,17 @@ public actor DarwinProcess {
       throw log(POSIXErrno(-1, fn: "pipe", reason: "creating stderr pipe: \(e)"))
     }
 
+
+    // Not needed on Darwin because of SPAWN_CLOEXEC -- but needed on other platforms
+    stderrR?.setCloexec()
+    stderrW.setCloexec()
+    stdoutR?.setCloexec()
+    stdoutW?.setCloexec()
+
+
+
+
+
     // posix_spawn file actions are optional-opaque on Darwin in Swift
     let irc = posix_spawn_file_actions_init(&actions)
     if irc != 0 {
@@ -248,6 +266,10 @@ public actor DarwinProcess {
       case is Substring, is String, is [UInt8], is AsyncStream<[UInt8]>:
         do {
           (openedStdinFDToCloseInParent, stdinWriteFDForParent) = try FileDescriptor.pipe()
+
+          openedStdinFDToCloseInParent?.setCloexec( )
+          stdinWriteFDForParent?.setCloexec()
+
           // Wire child's stdio
           try addDup2AndClose(&actions, from: openedStdinFDToCloseInParent!.rawValue, to: STDIN_FILENO,  closeSourceInChild: true)
 
