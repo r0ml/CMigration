@@ -285,14 +285,14 @@ public extension FilePath {
   var exists : Bool {
     var statBuf = stat()
     return self.string.withPlatformString { cPath in
-      stat(cPath, &statBuf) == 0
+      lstat(cPath, &statBuf) == 0
     }
   }
 
   var isDirectory : Bool {
     var statBuf = stat()
     return self.string.withPlatformString { cPath in
-      if stat(cPath, &statBuf) == 0 {
+      if lstat(cPath, &statBuf) == 0 {
         if statBuf.st_mode & S_IFDIR != 0 {
           return true
         }
@@ -1074,7 +1074,7 @@ public extension FilePath {
 public extension FilePath {
   func removeTree() throws {
     if !self.exists { return }
-    let st = try FileMetadata(for: self)
+    let st = try FileMetadata(for: self, followSymlinks: false)
     if st.filetype == .directory {
       let j = try self.listDirectory()
       for i in j {
