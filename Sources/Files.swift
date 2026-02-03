@@ -1051,7 +1051,7 @@ public extension FilePath {
   }
 
   func createDirectory(_ pr : FilePermissions) throws {
-    var d = FilePath()
+    var d = FilePath((self.root ?? FilePath.Root(".")).string)
     for p in self.components {
       d.append(p)
       if d.isDirectory { continue }
