@@ -1037,7 +1037,7 @@ public extension FilePath {
       let fdt = try FileDescriptor.open(target.removingLastComponent().string, .readOnly, options: .directory)
       let tc = target.lastComponent
       let fc = self.lastComponent
-      if 0 != Darwin.linkat(fds.rawValue, fc?.string ?? "", fdt.rawValue, tc?.string ?? "", Darwin.AT_SYMLINK_NOFOLLOW_ANY) {
+      if 0 != Darwin.linkat(fdt.rawValue, tc?.string ?? "", fds.rawValue, fc?.string ?? "", Darwin.AT_SYMLINK_NOFOLLOW_ANY) {
         throw POSIXErrno(fn: "linkat")
       }
     } catch(let e as Errno) {
