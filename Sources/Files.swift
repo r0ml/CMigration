@@ -282,24 +282,6 @@ public struct AsyncLineReader: AsyncSequence {
 }
 
 public extension FilePath {
-  var exists : Bool {
-    var statBuf = stat()
-    return self.string.withPlatformString { cPath in
-      lstat(cPath, &statBuf) == 0
-    }
-  }
-
-  var isDirectory : Bool {
-    var statBuf = stat()
-    return self.string.withPlatformString { cPath in
-      if lstat(cPath, &statBuf) == 0 {
-        if statBuf.st_mode & S_IFDIR != 0 {
-          return true
-        }
-      }
-      return false
-    }
-  }
 
   var isExecutable : Bool {
     return self.string.withPlatformString { cPath in
@@ -1054,7 +1036,7 @@ public extension FilePath {
     var d = FilePath((self.root ?? FilePath.Root(".")).string)
     for p in self.components {
       d.append(p)
-      if d.isDirectory { continue }
+      if (try? FileMetadata(for: d))?.filetype == .directory { continue }
       if 0 != mkdir(d.string, pr.rawValue) {
         throw POSIXErrno(fn: "createDirectory")
       }
@@ -1073,8 +1055,9 @@ public extension FilePath {
 
 public extension FilePath {
   func removeTree() throws {
-    if !self.exists { return }
-    let st = try FileMetadata(for: self, followSymlinks: false)
+    guard let st = try? FileMetadata(for: self, followSymlinks: false) else {
+      return
+    }
     if st.filetype == .directory {
       let j = try self.listDirectory()
       for i in j {
