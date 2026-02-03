@@ -1027,8 +1027,21 @@ public extension FilePath {
   }
 
   func createHardLink(to target: FilePath) throws {
-    if 0 != Darwin.linkat(AT_FDCWD, self.string, AT_FDCWD, target.string, Darwin.AT_SYMLINK_NOFOLLOW) {
-      throw POSIXErrno(fn: "linkat")
+    //  If I use absolute paths, the AT_SYMLINK_NOFOLLOW_ANY can cause failure trying to navigate the directory
+    //  The desired semantic is to create a hard link to the symbolic link if the final component is a symbolic link,
+    // but to follow symbolic links in the parent directory path.
+    // Hence:
+
+    do {
+      let fds = try FileDescriptor.open(self.removingLastComponent().string, .readOnly, options: .directory)
+      let fdt = try FileDescriptor.open(target.removingLastComponent().string, .readOnly, options: .directory)
+      let tc = target.lastComponent
+      let fc = self.lastComponent
+      if 0 != Darwin.linkat(fds.rawValue, fc?.string ?? "", fdt.rawValue, tc?.string ?? "", Darwin.AT_SYMLINK_NOFOLLOW_ANY) {
+        throw POSIXErrno(fn: "linkat")
+      }
+    } catch(let e as Errno) {
+      throw POSIXErrno(e.rawValue, fn: "linkat")
     }
   }
 
