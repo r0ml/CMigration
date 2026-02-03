@@ -289,6 +289,18 @@ public extension FilePath {
     }
   }
 
+  var isDirectory : Bool {
+    var statBuf = stat()
+    return self.string.withPlatformString { cPath in
+      if stat(cPath, &statBuf) == 0 {
+        if statBuf.st_mode & S_IFDIR != 0 {
+          return true
+        }
+      }
+      return false
+    }
+  }
+
   var isExecutable : Bool {
     return self.string.withPlatformString { cPath in
       access(cPath, X_OK) == 0
@@ -1035,6 +1047,17 @@ public extension FilePath {
   func createHardLink(to target: FilePath) throws {
     if 0 != Darwin.linkat(AT_FDCWD, self.string, AT_FDCWD, target.string, Darwin.AT_SYMLINK_NOFOLLOW) {
       throw POSIXErrno(fn: "linkat")
+    }
+  }
+
+  func createDirectory(_ pr : FilePermissions) throws {
+    var d = FilePath()
+    for p in self.components {
+      d.append(p)
+      if d.isDirectory { continue }
+      if 0 != mkdir(d.string, pr.rawValue) {
+        throw POSIXErrno(fn: "createDirectory")
+      }
     }
   }
 
