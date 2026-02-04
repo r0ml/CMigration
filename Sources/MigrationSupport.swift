@@ -80,13 +80,13 @@ public extension ShellCommand {
   }
 }
 
-public func errx(_ a : Int, _ b : String) {
+public func errx(_ a : Int, _ b : String) -> Never {
   fputs(basename(CommandLine.unsafeArgv[0]), stderr)
   fputs(": \(b)\n", stderr)
   exit(Int32(a))
 }
 
-public func err(_ a : Int, _ b : String?) {
+public func err(_ a : Int, _ b : String?) -> Never {
   let c = basename(CommandLine.unsafeArgv[0])
   let cc = c == nil ? "" : "\(String(cString: c!)): "
   let e = String(cString: strerror(errno))
