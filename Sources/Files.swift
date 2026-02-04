@@ -1102,12 +1102,12 @@ public extension FilePath {
   }
 
 
-  var dirname : String {
+  var dirname : FilePath {
     withUnsafeTemporaryAllocation(byteCount: MAXPATHLEN+1, alignment: 8) {
       if let d = Darwin.dirname_r(self.string, $0.baseAddress!) {
-        return String(platformString: d )
+        return FilePath(platformString: d )
       } else {
-        return self.removingLastComponent().string
+        return self.removingLastComponent()
       }
     }
   }
