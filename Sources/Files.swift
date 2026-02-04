@@ -1064,6 +1064,16 @@ public extension FilePath {
     }
   }
 
+  func realpath() throws -> FilePath {
+    let r = try withUnsafeTemporaryAllocation(byteCount: Int(PATH_MAX), alignment: 1) {
+      if let x = Darwin.realpath(self.string, $0.baseAddress) {
+        return String(platformString: x)
+      }
+      throw POSIXErrno(fn: "realpath")
+    }
+    return FilePath(r)
+  }
+
 }
 
 public extension FilePath {
