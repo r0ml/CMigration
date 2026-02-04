@@ -459,40 +459,6 @@ public struct POSIXErrno: Error {
 
 public let MAXPATHLEN : Int = Int(Darwin.MAXPATHLEN)
 
-public func basename(_ path : String) -> String {
-  // Empty string gets treated as "."
-  if path.isEmpty {
-    return "."
-  }
-
-  var ppath = Substring(path)
-
-  // Strip any trailing slashes
-  while ppath.last == "/" {
-    ppath = ppath.dropLast()
-  }
-
-  // All slashes becomes "/"
-  if ppath.isEmpty {
-    return "/"
-  }
-
-  // Find the start of the base
-  var res = Substring("")
-  while !ppath.isEmpty && ppath.last != "/" {
-    res.insert(ppath.last!, at: ppath.startIndex)
-    ppath = ppath.dropLast()
-  }
-
-  /*
-  if res.count >= MAXPATHLEN {
-    throw POSIXErrno(ENAMETOOLONG)
-  }
-*/
-
-  return String(res)
-}
-
 
 
 public enum DeviceType {
@@ -882,7 +848,7 @@ public extension FileDescriptor {
 // =============================================
 
 // FIXME: Need to harmonize  'readUpToCount', 'readToEnd', and 'readAllBytes'
-extension FileDescriptor {
+public extension FileDescriptor {
   func readAsString() throws -> String {
     let k = try readAllBytes()
     return String(decoding: k, as: UTF8.self)
@@ -1098,3 +1064,55 @@ public extension FilePath {
   }
 }
 
+
+public extension FilePath {
+  // reimplemnted basename from libc
+  var basename : String {
+    // Empty string gets treated as "."
+    if self.string.isEmpty {
+      return "."
+    }
+
+    var ppath = Substring(self.string)
+
+    // Strip any trailing slashes
+    while ppath.last == "/" {
+      ppath = ppath.dropLast()
+    }
+
+    // All slashes becomes "/"
+    if ppath.isEmpty {
+      return "/"
+    }
+
+    // Find the start of the base
+    var res = Substring("")
+    while !ppath.isEmpty && ppath.last != "/" {
+      res.insert(ppath.last!, at: ppath.startIndex)
+      ppath = ppath.dropLast()
+    }
+
+    /*
+    if res.count >= MAXPATHLEN {
+      throw POSIXErrno(ENAMETOOLONG)
+    }
+  */
+
+    return String(res)
+  }
+
+
+  var dirname : String {
+    withUnsafeTemporaryAllocation(byteCount: MAXPATHLEN+1, alignment: 8) {
+      if let d = Darwin.dirname_r(self.string, $0.baseAddress!) {
+        return String(platformString: d )
+      } else {
+        return self.removingLastComponent().string
+      }
+    }
+  }
+
+
+
+
+}
