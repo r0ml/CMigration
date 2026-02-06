@@ -84,13 +84,13 @@
 
 import Darwin
 
-public enum argType: Int32 {
+public enum argType: Int32, Sendable {
   case no_argument = 0
   case required_argument = 1
   case optional_argument = 2
 }
 
-public struct option {
+public struct LongOption : Sendable {
   public let name: String
   public let has_arg: argType
 
@@ -124,7 +124,7 @@ public class BSDGetopt_long {
   let INORDER = "\u{01}"
 
   var options: String
-  var long_options: [option]
+  var long_options: [LongOption]
   var nargv: [String]
 
   var posixly_correct: Bool
@@ -145,7 +145,7 @@ public class BSDGetopt_long {
   var place = ""
 
   public init(
-    _ s: String, _ long_options: [option],
+    _ s: String, _ long_options: [LongOption],
     _ args: [String] = Array(CommandLine.arguments.dropFirst())
   ) {
     self.options = s
