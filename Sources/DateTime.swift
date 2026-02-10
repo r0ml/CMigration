@@ -3,7 +3,15 @@
 
 import Darwin
 
-public struct DateTime {
+public struct DateTime : Comparable {
+  public static func < (lhs: DateTime, rhs: DateTime) -> Bool {
+    if lhs.secs < rhs.secs { return true }
+    if lhs.secs == rhs.secs {
+      if lhs.nanosecs < rhs.nanosecs { return true }
+    }
+    return false
+  }
+
   public var secs : Int
   public var nanosecs : Int
 
