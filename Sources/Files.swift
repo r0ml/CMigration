@@ -768,7 +768,7 @@ enum StringEncodingError : Error {
 
 
 public extension FilePath {
-  func listDirectory() throws -> [String] {
+  func listDirectory() throws(POSIXErrno) -> [String] {
     // opendir wants a C string path
     let dirString = self.string
 
@@ -808,7 +808,7 @@ public extension FilePath {
 
 
 public extension FileDescriptor {
-  func listDirectory() throws -> [String] {
+  func listDirectory() throws(POSIXErrno) -> [String] {
     // opendir wants a C string path
 
     guard let dp = fdopendir(rawValue) else {
@@ -856,7 +856,7 @@ public extension FileDescriptor {
 
   /// Read all bytes from an already-open FD (files/pipes/sockets).
   /// This is always streaming (mmap doesn’t apply).
-  public func readAllBytes() throws -> [UInt8] {
+  func readAllBytes() throws -> [UInt8] {
       var out: [UInt8] = []
       out.reserveCapacity(8192)
 
@@ -884,7 +884,7 @@ public extension FileDescriptor {
       return out
   }
 
-  public func writeAllBytes(_ bytes: [UInt8]) throws {
+  func writeAllBytes(_ bytes: [UInt8]) throws {
           var written = 0
           while written < bytes.count {
               let n: Int
@@ -964,13 +964,13 @@ public extension FilePath {
 
 
 public extension FileDescriptor {
-  func setPermissions(_ p : FilePermissions) throws {
+  func setPermissions(_ p : FilePermissions) throws(POSIXErrno) {
     if 0 != fchmod(self.rawValue, p.rawValue) {
       throw POSIXErrno(fn: "setPermissions")
     }
   }
 
-  func setTimes(modified: DateTime? = nil, accessed: DateTime? = nil) throws {
+  func setTimes(modified: DateTime? = nil, accessed: DateTime? = nil) throws(POSIXErrno) {
     let omit = timespec(tv_sec: 0, tv_nsec: Int(Darwin.UTIME_OMIT))
     var times : (timespec, timespec) = ( modified?.timespec ?? omit, accessed?.timespec ?? omit)
     if futimens( self.rawValue, &times.0) != 0 {
@@ -980,20 +980,20 @@ public extension FileDescriptor {
 }
 
 public extension FilePath {
-  func setPermissions(_ p : FilePermissions, followSymlinks: Bool = false) throws {
+  func setPermissions(_ p : FilePermissions, followSymlinks: Bool = false) throws(POSIXErrno) {
     let f = followSymlinks ? chmod : lchmod
     if 0 != f(self.string, p.rawValue) {
       throw POSIXErrno(fn: "setPermissions")
     }
   }
 
-  func createSymbolicLink(to target: FilePath) throws {
+  func createSymbolicLink(to target: FilePath) throws(POSIXErrno) {
     if 0 != symlink(target.string, self.string) {
       throw POSIXErrno(fn: "createSymbolicLink")
     }
   }
 
-  func createHardLink(to target: FilePath) throws {
+  func createHardLink(to target: FilePath) throws(POSIXErrno) {
     //  If I use absolute paths, the AT_SYMLINK_NOFOLLOW_ANY can cause failure trying to navigate the directory
     //  The desired semantic is to create a hard link to the symbolic link if the final component is a symbolic link,
     // but to follow symbolic links in the parent directory path.
@@ -1009,6 +1009,8 @@ public extension FilePath {
       }
     } catch(let e as Errno) {
       throw POSIXErrno(e.rawValue, fn: "linkat")
+    } catch(let e) {
+      throw POSIXErrno(errno, fn: "linkat")
     }
   }
 
