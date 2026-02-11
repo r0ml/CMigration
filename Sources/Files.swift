@@ -980,8 +980,9 @@ public extension FileDescriptor {
 }
 
 public extension FilePath {
-  func setPermissions(_ p : FilePermissions) throws {
-    if 0 != chmod(self.string, p.rawValue) {
+  func setPermissions(_ p : FilePermissions, followSymlinks: Bool = false) throws {
+    let f = followSymlinks ? chmod : lchmod
+    if 0 != f(self.string, p.rawValue) {
       throw POSIXErrno(fn: "setPermissions")
     }
   }
