@@ -25,7 +25,7 @@ public struct FileStream {
     private var wbuf: [UInt8] = []
     var writeBufferLimit: Int = 64 * 1024   // auto-flush threshold
 
-  init(_ fp : FilePath, mode: FileDescriptor.AccessMode = .readWrite) throws(POSIXErrno) {
+  public init(_ fp : FilePath, mode: FileDescriptor.AccessMode = .readWrite) throws(POSIXErrno) {
     do {
       self.fd = try FileDescriptor.open(fp, mode)
   //    self.mode = mode
@@ -37,7 +37,7 @@ public struct FileStream {
     }
   }
 
-  init(_ fd: FileDescriptor) {
+  public init(_ fd: FileDescriptor) {
     self.fd = fd
 //        self.mode = mode
       self.ownership = .borrowed
@@ -81,7 +81,7 @@ public struct FileStream {
     ///   - includeDelimiter: whether returned data includes delimiter
     ///   - maxBytes: safety cap to prevent unbounded growth
     /// - Returns: bytes read, or nil on EOF with no pending data.
-    mutating func readUntil(
+    public mutating func readUntil(
         _ delimiter: UInt8,
         includeDelimiter: Bool = false,
         maxBytes: Int = 8 * 1024 * 1024
@@ -113,7 +113,7 @@ public struct FileStream {
   // ==========================================================================
 
     /// `FILE*`-like `fgets`: reads a line terminated by '\n' (newline not included).
-    mutating func readLine(maxBytes: Int = 8 * 1024 * 1024) throws(POSIXErrno) -> [UInt8]? {
+    public mutating func readLine(maxBytes: Int = 8 * 1024 * 1024) throws(POSIXErrno) -> [UInt8]? {
         return try readUntil(0x0A, includeDelimiter: false, maxBytes: maxBytes)
     }
 
@@ -133,7 +133,7 @@ public struct FileStream {
     // MARK: - Writing
 
     /// Buffer bytes for output (auto-flush at `writeBufferLimit`).
-    mutating func write(_ bytes: [UInt8]) throws(POSIXErrno) {
+    public mutating func write(_ bytes: [UInt8]) throws(POSIXErrno) {
         wbuf.append(contentsOf: bytes)
         if wbuf.count >= writeBufferLimit {
             try flush()
@@ -141,7 +141,7 @@ public struct FileStream {
     }
 
     /// Convenience: write a single byte.
-    mutating func putc(_ byte: UInt8) throws(POSIXErrno) {
+    public mutating func putc(_ byte: UInt8) throws(POSIXErrno) {
         wbuf.append(byte)
         if wbuf.count >= writeBufferLimit {
             try flush()
@@ -149,13 +149,13 @@ public struct FileStream {
     }
 
     /// Write bytes + '\n' (like `fputs` + newline).
-    mutating func writeLine(_ bytes: [UInt8]) throws(POSIXErrno) {
+    public mutating func writeLine(_ bytes: [UInt8]) throws(POSIXErrno) {
         try write(bytes)
         try putc(0x0A)
     }
 
     /// Flush buffered output (like `fflush`).
-    mutating func flush() throws(POSIXErrno) {
+    public mutating func flush() throws(POSIXErrno) {
         guard !wbuf.isEmpty else { return }
         var total = 0
         while total < wbuf.count {
@@ -182,7 +182,7 @@ public struct FileStream {
 
 // MARK: - Tiny helpers (no Foundation)
 
-extension FileStream {
+public extension FileStream {
     /// UTF-8 decode without Foundation.
     mutating func readLineUTF8(maxBytes: Int = 8 * 1024 * 1024) throws -> String? {
         guard let b = try readLine(maxBytes: maxBytes) else { return nil }
