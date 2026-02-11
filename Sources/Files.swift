@@ -34,7 +34,7 @@ import Darwin
 
 
 extension FilePath {
-  public func isRegularFile() throws -> Bool {
+  public func isRegularFile() throws(POSIXErrno) -> Bool {
     let statBuf = try FileMetadata(for: self)
     return statBuf.filetype == .regular
   }
@@ -1014,7 +1014,7 @@ public extension FilePath {
     }
   }
 
-  func createDirectory(_ pr : FilePermissions) throws {
+  func createDirectory(_ pr : FilePermissions) throws(POSIXErrno) {
     var d = FilePath((self.root ?? FilePath.Root(".")).string)
     for p in self.components {
       d.append(p)
@@ -1025,7 +1025,7 @@ public extension FilePath {
     }
   }
 
-  func setTimes(modified: DateTime? = nil, accessed: DateTime? = nil) throws {
+  func setTimes(modified: DateTime? = nil, accessed: DateTime? = nil) throws(POSIXErrno) {
     let omit = timespec(tv_sec: 0, tv_nsec: Int(Darwin.UTIME_OMIT))
     var times : (timespec, timespec) = ( modified?.timespec ?? omit, accessed?.timespec ?? omit)
     if utimensat(AT_FDCWD, self.string, &times.0, AT_SYMLINK_NOFOLLOW ) != 0 {
@@ -1033,20 +1033,21 @@ public extension FilePath {
     }
   }
 
-  func realpath() throws -> FilePath {
-    let r = try withUnsafeTemporaryAllocation(byteCount: Int(PATH_MAX), alignment: 1) {
+  func realpath() throws(POSIXErrno) -> FilePath {
+    let (r,e) : (String?, POSIXErrno?) = withUnsafeTemporaryAllocation(byteCount: Int(PATH_MAX), alignment: 1) {
       if let x = Darwin.realpath(self.string, $0.baseAddress) {
-        return String(platformString: x)
+        return (String(cString: x), nil)
       }
-      throw POSIXErrno(fn: "realpath")
+      return (nil, POSIXErrno(fn: "realpath"))
     }
-    return FilePath(r)
+    if let r { return FilePath(r) }
+    else { throw e! }
   }
 
 }
 
 public extension FilePath {
-  func removeTree() throws {
+  func removeTree() throws(POSIXErrno) {
     guard let st = try? FileMetadata(for: self, followSymlinks: false) else {
       return
     }
