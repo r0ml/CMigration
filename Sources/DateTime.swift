@@ -30,6 +30,13 @@ public struct DateTime : Comparable {
     nanosecs = 0
   }
 
+  public init() {
+    var ts = Darwin.timespec()
+    clock_gettime(CLOCK_REALTIME, &ts) // != 0 { perror("clock_gettime") }
+    secs = ts.tv_sec        // time_t
+    nanosecs = ts.tv_nsec   // long
+  }
+
   public var timeInterval : Double {
     Double(secs) + Double(nanosecs) / 1_000_000_000
   }
