@@ -595,10 +595,10 @@ public struct FileMetadata {
   public var userId : UInt               // user-id of owner
   public var groupId : UInt              // group-id of owner
   public var rawDevice : UInt            // device for special file inode
-  public var created : DateTime          // creation time
-  public var lastAccess : DateTime       // time of last access
-  public var lastWrite : DateTime        // time of last data modification
-  public var lastModification : DateTime // time of last file status change
+  public var whenCreated : DateTime          // creation time
+  public var lastAccessed : DateTime       // time of last access
+  public var lastModified : DateTime        // time of last data modification
+  public var lastChanged : DateTime // time of last file status change
   public var size : UInt                 // file size, in bytes
   public var blocks : UInt               // blocks allocated for file
   public var blockSize : UInt            // optimal file sys I/O ops blocksize
