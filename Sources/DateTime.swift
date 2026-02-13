@@ -80,6 +80,13 @@ public struct DateTime : Comparable {
   }
 
 
+  static func + (lhs: DateTime, rhs: Int) -> DateTime {
+    DateTime(Darwin.timespec(tv_sec: lhs.secs + rhs, tv_nsec: lhs.nanosecs))
+  }
+
+  static func - (lhs: DateTime, rhs: Int) -> DateTime {
+    DateTime(Darwin.timespec(tv_sec: lhs.secs - rhs, tv_nsec: lhs.nanosecs))
+  }
 
 }
 
