@@ -17,7 +17,7 @@ public struct Sysconf {
   _SC_IOV_MAX The maximum number of elements in the I/O vector used by readv(2), writev(2), recvmsg(2), and sendmsg(2).
  */
 
-  public static var scNroupsMax : Int { return Darwin.sysconf(Darwin._SC_NGROUPS_MAX) } //  The maximum number of supplemental groups.
+  public static var scNgroupsMax : Int { return Darwin.sysconf(Darwin._SC_NGROUPS_MAX) } //  The maximum number of supplemental groups.
   public static var scNprocessorsConf : Int { return Darwin.sysconf(Darwin._SC_NPROCESSORS_CONF) } // The number of processors configured.
   public static var scNprocessorsOnln : Int { return Darwin.sysconf(Darwin._SC_NPROCESSORS_ONLN) } // The number of processors currently online.
 
