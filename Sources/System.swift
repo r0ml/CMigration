@@ -21,10 +21,11 @@ public struct Sysconf {
   public static var scNprocessorsConf : Int { return Darwin.sysconf(Darwin._SC_NPROCESSORS_CONF) } // The number of processors configured.
   public static var scNprocessorsOnln : Int { return Darwin.sysconf(Darwin._SC_NPROCESSORS_ONLN) } // The number of processors currently online.
 
-  /*
-  _SC_OPEN_MAX The maximum number of open files per user id.
-  _SC_PAGESIZE The size of a system page in bytes.
-  _SC_STREAM_MAX The minimum maximum number of streams that a process may have open at any one time.
+  public static var scOpenMax : Int { return sysconf(_SC_OPEN_MAX) } // The maximum number of open files per user id.
+  public static var scPagesize : Int { return sysconf(_SC_PAGESIZE) } // The size of a system page in bytes.
+
+/*
+ _SC_STREAM_MAX The minimum maximum number of streams that a process may have open at any one time.
   _SC_TZNAME_MAX The minimum maximum number of types supported for the name of a timezone.
   _SC_JOB_CONTROL Return 1 if job control is available on this system, otherwise -1.
   _SC_SAVED_IDS Returns 1 if saved set-group and saved set-user ID is available, otherwise -1.
@@ -48,9 +49,9 @@ public struct Sysconf {
   _SC_2_UPE Return 1 if the system supports the User Portability Utilities Option, otherwise -1.
 
     These values also exist, but may not be standard:
-
-  _SC_PHYS_PAGES The number of pages of physical memory. Note that it is possible that the product of this value and the value of _SC_PAGESIZE will overflow a (long) in some configurations on a 32bit machine.
 */
+  public static var scPhysPages : Int { return Darwin.sysconf(Darwin._SC_PHYS_PAGES) } // The number of pages of physical memory. Note that it is possible that the product of this value and the value of _SC_PAGESIZE will overflow a (long) in some configurations on a 32bit machine.
+
 }
 
 public struct Sysctl {
