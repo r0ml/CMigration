@@ -282,12 +282,24 @@ public actor DarwinProcess {
         }
 
       default:
-        break
+        // No stdin redirection requested. Because POSIX_SPAWN_CLOEXEC_DEFAULT
+        // is set below, every fd not mentioned in a file action will be closed
+        // in the child. Explicitly inherit STDIN so the child can read from
+        // the parent's stdin.
+        let rcInheritStdin = posix_spawn_file_actions_addinherit_np(&actions, STDIN_FILENO)
+        if rcInheritStdin != 0 {
+          throw log(POSIXErrno(rcInheritStdin, fn: "posix_spawn_file_actions_addinherit_np(stdin)"))
+        }
     }
 
     do {
       if captureOutput {
         try addDup2AndClose(&actions, from: stdoutW!.rawValue, to: STDOUT_FILENO, closeSourceInChild: true)
+      } else {
+        let rcInheritStdout = posix_spawn_file_actions_addinherit_np(&actions, STDOUT_FILENO)
+        if rcInheritStdout != 0 {
+          throw log(POSIXErrno(rcInheritStdout, fn: "posix_spawn_file_actions_addinherit_np(stdout)"))
+        }
       }
       try addDup2AndClose(&actions, from: stderrW.rawValue, to: STDERR_FILENO, closeSourceInChild: true)
     } catch(let e as Errno) {
