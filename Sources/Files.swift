@@ -1117,6 +1117,22 @@ public extension FilePath {
   }
 
 
+  func relativeTo(_ baseDirectory: FilePath) -> String {
+      func components(_ path: String) -> [Substring] {
+          path.split(separator: "/", omittingEmptySubsequences: true)
+      }
 
+    let base = components(baseDirectory.string)
+    let target = components(self.string)
+    var common = 0
+    while common < min(base.count, target.count),
+       base[common] == target[common] {
+       common += 1
+    }
+    let up = Array(repeating: "..", count: base.count - common)
+    let down = target[common...].map(String.init)
+    let result = up + down
+    return result.isEmpty ? "." : result.joined(separator: "/")
+  }
 
 }
