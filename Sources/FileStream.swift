@@ -2,7 +2,7 @@
 // Modernized by Robert "r0ml" Lefkowitz <code@liberally.net> in 2026
 
 
-import SystemPackage
+import System
 import Darwin
 
 /// A tiny stdio-like wrapper around a FileDescriptor.

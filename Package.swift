@@ -26,13 +26,9 @@ let package = Package(
   // Mutex is only available in v15 or newer
   platforms: [.macOS(.v15), .iOS(.v18)],
   products: [
-    .library(name: "CMigration", targets: ["CMigration"])],
-  dependencies: [
-    .package(url: "https://github.com/apple/swift-system", from: "1.4.0"),
-  ],
+    .library(name: "CMigration", targets: ["CMigration"]),
+    ],
   targets: [
-    .target(name: "CMigration", dependencies: [
-      .product(name: "SystemPackage", package: "swift-system"),
-    ]),
+    .target(name: "CMigration"),
   ]
 )

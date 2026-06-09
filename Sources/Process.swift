@@ -1,7 +1,7 @@
 // Copyright (c) 1868 Charles Babbage
 // Modernized by Robert "r0ml" Lefkowitz <code@liberally.net> in 2025
 
-import SystemPackage
+import System
 import Darwin
 
 import os
@@ -390,8 +390,6 @@ public actor DarwinProcess {
     // Parent side: close pipe ends we must not keep open.
     // - For stdout/stderr: close the write ends in the parent (child owns those).
 
-
-
     do {
       try stdoutW?.close()
       try stderrW.close()
@@ -411,6 +409,16 @@ public actor DarwinProcess {
         let res = try so.readAllBytes()
         return res
       }
+
+/*
+      readerTask = Task.detached {
+        while let res = try so.readAvailableBytes() {
+          if res.isEmpty { Task.sleep(for: .milliseconds(100)) }
+          else { captureOutput(res)}
+        }
+      }
+*/
+
     }
 
     let se = stderrR!
@@ -586,4 +594,40 @@ public func execvp(_ x : String, _ a : [String]) -> POSIXErrno {
   let az = a.map { $0.withCString { strdup($0) } } + [UnsafeMutablePointer<CChar>.init(bitPattern: 0)]
   Darwin.execvp(x, az )
   return POSIXErrno()
+}
+
+public extension FileDescriptor {
+  func readAvailableBytes() throws(Errno) -> [UInt8] {
+    // Put descriptor into non-blocking mode
+    let flags = fcntl(self.rawValue, F_GETFL)
+    guard flags >= 0 else { throw Errno(rawValue: EIO) }
+    guard fcntl(self.rawValue, F_SETFL, flags | O_NONBLOCK) >= 0 else {
+      throw Errno(rawValue: EIO)
+    }
+    var result: [UInt8] = []
+    var buffer = [UInt8](repeating: 0, count: 4096)
+
+    while true {
+      do {
+        let count = try buffer.withUnsafeMutableBytes { rawBuffer in
+          try self.read(into: rawBuffer)
+        }
+        if count == 0 {
+          // EOF
+          break
+        }
+        result.append(contentsOf: buffer.prefix(count))
+      } catch let error as Errno {
+        if error == .wouldBlock {
+          // No more data currently available
+          break
+        }
+        throw error
+      } catch {
+        throw Errno.ioError
+      }
+
+    }
+    return result
+  }
 }

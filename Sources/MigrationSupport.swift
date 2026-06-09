@@ -17,7 +17,7 @@
   OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-@_exported import SystemPackage
+@_exported import System
 
 import locale_h
 import Darwin
