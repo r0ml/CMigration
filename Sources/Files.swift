@@ -39,6 +39,13 @@ extension FilePath {
     let statBuf = try FileMetadata(for: self, followSymlinks: false)
     return statBuf.filetype == .regular
   }
+
+  public func rename(to: FilePath) throws(POSIXErrno) {
+    let k = Darwin.rename(self.string, to.string)
+    if k != 0 {
+      throw POSIXErrno(k, fn: "rename")
+    }
+  }
 }
 
 extension FileDescriptor {
@@ -1137,3 +1144,12 @@ public extension FilePath {
   }
 
 }
+
+public func posixRename(from oldPath: String, to newPath: String) throws {
+    if rename(oldPath, newPath) != 0 {
+        // If an error occurs, capture it using errno
+//        throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno), userInfo: nil)
+      throw Errno(rawValue: errno)
+    }
+}
+
