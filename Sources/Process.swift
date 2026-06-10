@@ -134,7 +134,7 @@ public actor DarwinProcess {
   var stdoutR : FileDescriptor? = nil
   var stderrR : FileDescriptor? = nil
   var feederTask : Task<Void, Error>? = nil
-//  var readerTask : Task<[UInt8], Error>? = nil
+  var readerTask : Task<Void, Error>? = nil
   var errorTask : Task<String, Error>? = nil
 
   var actions: posix_spawn_file_actions_t? = nil
@@ -429,13 +429,12 @@ public actor DarwinProcess {
     if captureOutput {
         let so = stdoutR!
         pendingOutput = []
-       // readerTask =
-        Task.detached {
+        readerTask = Task.detached {
           while true {
             try so.waitUntilReadable()
             let res = try so.readAvailableBytes()
             if res.isEmpty {
-              return []
+              return
             } else {
               await self.appendOutput(res)
             }
@@ -531,7 +530,7 @@ public actor DarwinProcess {
     async let _ = feederTask?.value
     async let stderr = errorTask!.value
 
-    await Task.yield()
+    try await readerTask?.value
     let stdout = pendingOutput
 
 
