@@ -43,7 +43,7 @@ extension FilePath {
 
 extension FileDescriptor {
   public var isRegularFile : Bool {
-    var sbp = stat()
+    var sbp = Darwin.stat()
     if fstat(self.rawValue, &sbp) != 0 {
       return false
     }
@@ -492,7 +492,7 @@ public struct FileFlags: OptionSet, Sendable, Hashable {
    *
    * Super-user and owner changeable flags.
    */
-//  public static let SETTABLE     0x0000ffff      /* mask of owner changeable flags */
+  //  public static let SETTABLE     0x0000ffff      /* mask of owner changeable flags */
   public static let UF_NODUMP       = Self(rawValue: 1 << 0)      /* do not dump file */
   public static let UF_IMMUTABLE    = Self(rawValue: 1 << 1)      /* file may not be changed */
   public static let UF_APPEND       = Self(rawValue: 1 << 2)      /* writes to file may only append */
@@ -509,17 +509,17 @@ public struct FileFlags: OptionSet, Sendable, Hashable {
   public static let UF_TRACKED      = Self(rawValue: 1 << 6)
 
   public static let UF_DATAVAULT    = Self(rawValue: 1 << 7)     /* entitlement required for reading */
-                                          /* and writing */
+  /* and writing */
 
   /* Bits 0x0100 through 0x4000 are currently undefined. */
   public static let UF_HIDDEN       = Self(rawValue: 1 << 8)     /* hint that this item should not be */
-                                          /* displayed in a GUI */
+  /* displayed in a GUI */
   /*
    * Super-user changeable flags.
    */
-//  #define SF_SUPPORTED    0x009f0000      /* mask of superuser supported flags */
-//  #define SF_SETTABLE     0x3fff0000      /* mask of superuser changeable flags */
-//  public static let SYNTHETIC    0xc0000000      /* mask of system read-only synthetic flags */
+  //  #define SF_SUPPORTED    0x009f0000      /* mask of superuser supported flags */
+  //  #define SF_SETTABLE     0x3fff0000      /* mask of superuser changeable flags */
+  //  public static let SYNTHETIC    0xc0000000      /* mask of system read-only synthetic flags */
   public static let SF_ARCHIVED     = Self(rawValue: 1 << 16)      /* file is archived */
   public static let SF_IMMUTABLE    = Self(rawValue: 1 << 17)      /* file may not be changed */
   public static let SF_APPEND       = Self(rawValue: 1 << 18)      /* writes to file may only append */
@@ -722,14 +722,14 @@ public func readlink(_ s : String) throws(POSIXErrno) -> String {
   return r
   /*
    name = withUnsafeTemporaryAllocation(byteCount: Int(PATH_MAX), alignment: 1) { p -> String? in
-     let pp = p.assumingMemoryBound(to: UInt8.self).baseAddress!
-     let len = readlink(entry.accpath, pp , Int(PATH_MAX) - 1)
-     if (len == -1) {
-       return nil
-     } else {
-//          let k = Data(bytes: pp, count: len)
-       return String(decoding: UnsafeBufferPointer(start: pp, count: len), as: Unicode.ASCII.self)
-     }
+   let pp = p.assumingMemoryBound(to: UInt8.self).baseAddress!
+   let len = readlink(entry.accpath, pp , Int(PATH_MAX) - 1)
+   if (len == -1) {
+   return nil
+   } else {
+   //          let k = Data(bytes: pp, count: len)
+   return String(decoding: UnsafeBufferPointer(start: pp, count: len), as: Unicode.ASCII.self)
+   }
    }
    */
 }
@@ -829,9 +829,9 @@ public extension FileDescriptor {
         }
       }
 
-//      if !includeDotEntries, (name == "." || name == "..") {
-//        continue
-//      }
+      //      if !includeDotEntries, (name == "." || name == "..") {
+      //        continue
+      //      }
 
       // Build a child path: dir/<name>
       results.append(name)
@@ -858,54 +858,54 @@ public extension FileDescriptor {
   /// Read all bytes from an already-open FD (files/pipes/sockets).
   /// This is always streaming (mmap doesn’t apply).
   func readAllBytes() throws -> [UInt8] {
-      var out: [UInt8] = []
-      out.reserveCapacity(8192)
+    var out: [UInt8] = []
+    out.reserveCapacity(8192)
 
-      var buf = [UInt8](repeating: 0, count: 64 * 1024)
+    var buf = [UInt8](repeating: 0, count: 64 * 1024)
 
-      while true {
-        // Optional cancellation check (won't interrupt a blocked read in progress,
-        // but will stop promptly between reads).
-        if Task.isCancelled { throw CancellationError() }
+    while true {
+      // Optional cancellation check (won't interrupt a blocked read in progress,
+      // but will stop promptly between reads).
+      if Task.isCancelled { throw CancellationError() }
 
-        let n: Int
-        do {
-          n = try buf.withUnsafeMutableBytes { rawBuf in
-            try self.read(into: rawBuf)
-          }
-        } catch let e as Errno {
-          if e == .interrupted { continue }   // EINTR
-          throw e
+      let n: Int
+      do {
+        n = try buf.withUnsafeMutableBytes { rawBuf in
+          try self.read(into: rawBuf)
         }
-
-        if n == 0 { break } // EOF
-        out.append(contentsOf: buf[0..<n])
+      } catch let e as Errno {
+        if e == .interrupted { continue }   // EINTR
+        throw e
       }
 
-      return out
+      if n == 0 { break } // EOF
+      out.append(contentsOf: buf[0..<n])
+    }
+
+    return out
   }
 
   func writeAllBytes(_ bytes: [UInt8]) throws {
-          var written = 0
-          while written < bytes.count {
-              let n: Int
-              do {
-                  n = try bytes.withUnsafeBytes { rawBuf in
-                      let base = rawBuf.bindMemory(to: UInt8.self).baseAddress!
-                      let ptr = base.advanced(by: written)
-                      let remaining = bytes.count - written
-                      return try write(UnsafeRawBufferPointer(start: ptr, count: remaining))
-                  }
-              } catch let e as Errno {
-                  if e == .interrupted { continue }
-                  throw e
-              }
-              if n == 0 {
-                  // Shouldn't happen for a pipe write unless something is very wrong.
-                throw POSIXErrno(EPIPE, fn: "write")
-              }
-              written += n
-          }
+    var written = 0
+    while written < bytes.count {
+      let n: Int
+      do {
+        n = try bytes.withUnsafeBytes { rawBuf in
+          let base = rawBuf.bindMemory(to: UInt8.self).baseAddress!
+          let ptr = base.advanced(by: written)
+          let remaining = bytes.count - written
+          return try write(UnsafeRawBufferPointer(start: ptr, count: remaining))
+        }
+      } catch let e as Errno {
+        if e == .interrupted { continue }
+        throw e
+      }
+      if n == 0 {
+        // Shouldn't happen for a pipe write unless something is very wrong.
+        throw POSIXErrno(EPIPE, fn: "write")
+      }
+      written += n
+    }
   }
 
 
@@ -932,35 +932,35 @@ public extension FilePath {
     return try fd.readAllBytes()
   }
 
-    // MARK: - mmap fast-path (regular files only)
+  // MARK: - mmap fast-path (regular files only)
 
-    /// Returns bytes via mmap if `path` is a regular file; otherwise throws.
-    /// This copies once into `[UInt8]` (still typically faster than read loop for large regular files).
-    private func mmapRegularFile() throws -> [UInt8] {
-        try self.withPlatformString { cPath in
-            let fd = Darwin.open(cPath, O_RDONLY)
-          if fd < 0 { throw POSIXErrno(fn: "open") }
-            defer { _ = Darwin.close(fd) }
+  /// Returns bytes via mmap if `path` is a regular file; otherwise throws.
+  /// This copies once into `[UInt8]` (still typically faster than read loop for large regular files).
+  private func mmapRegularFile() throws -> [UInt8] {
+    try self.withPlatformString { cPath in
+      let fd = Darwin.open(cPath, O_RDONLY)
+      if fd < 0 { throw POSIXErrno(fn: "open") }
+      defer { _ = Darwin.close(fd) }
 
-            var st = stat()
-          if fstat(fd, &st) != 0 { throw POSIXErrno(fn: "fstat") }
+      var st = Darwin.stat()
+      if fstat(fd, &st) != 0 { throw POSIXErrno(fn: "fstat") }
 
-            // Only try mmap for regular files. Pipes/sockets/devices will fail or be meaningless.
-            if (st.st_mode & S_IFMT) != S_IFREG {
-              throw POSIXErrno(EINVAL, fn: "mmap", reason: "not a regular file")
-            }
+      // Only try mmap for regular files. Pipes/sockets/devices will fail or be meaningless.
+      if (st.st_mode & S_IFMT) != S_IFREG {
+        throw POSIXErrno(EINVAL, fn: "mmap", reason: "not a regular file")
+      }
 
-            if st.st_size == 0 { return [] }
+      if st.st_size == 0 { return [] }
 
-            let length = Int(st.st_size)
-            let mapped = mmap(nil, length, PROT_READ, MAP_PRIVATE, fd, 0)
-          if mapped == MAP_FAILED { throw POSIXErrno(fn: "mmap") }
-            defer { _ = munmap(mapped, length) }
+      let length = Int(st.st_size)
+      let mapped = mmap(nil, length, PROT_READ, MAP_PRIVATE, fd, 0)
+      if mapped == MAP_FAILED { throw POSIXErrno(fn: "mmap") }
+      defer { _ = munmap(mapped, length) }
 
-          let ptr = mapped!.assumingMemoryBound(to: UInt8.self)
-            return Array(UnsafeBufferPointer(start: ptr, count: length))
-        }
+      let ptr = mapped!.assumingMemoryBound(to: UInt8.self)
+      return Array(UnsafeBufferPointer(start: ptr, count: length))
     }
+  }
 }
 
 
@@ -1098,10 +1098,10 @@ public extension FilePath {
     }
 
     /*
-    if res.count >= MAXPATHLEN {
-      throw POSIXErrno(ENAMETOOLONG)
-    }
-  */
+     if res.count >= MAXPATHLEN {
+     throw POSIXErrno(ENAMETOOLONG)
+     }
+     */
 
     return String(res)
   }
@@ -1119,16 +1119,16 @@ public extension FilePath {
 
 
   func relativeTo(_ baseDirectory: FilePath) -> String {
-      func components(_ path: String) -> [Substring] {
-          path.split(separator: "/", omittingEmptySubsequences: true)
-      }
+    func components(_ path: String) -> [Substring] {
+      path.split(separator: "/", omittingEmptySubsequences: true)
+    }
 
     let base = components(baseDirectory.string)
     let target = components(self.string)
     var common = 0
     while common < min(base.count, target.count),
-       base[common] == target[common] {
-       common += 1
+          base[common] == target[common] {
+      common += 1
     }
     let up = Array(repeating: "..", count: base.count - common)
     let down = target[common...].map(String.init)
