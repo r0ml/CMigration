@@ -119,12 +119,6 @@ extension FileDescriptor {
 
 public actor DarwinProcess {
 
-  public enum CaptureOutput : Sendable {
-    case ignore
-    case asBytes
-    case callback(@Sendable ([UInt8]) -> Void )
-  }
-
   public struct Output : Sendable {
     public let code : Int32
     public let data : [UInt8]
@@ -148,6 +142,8 @@ public actor DarwinProcess {
   var awaitingValue = false
   var launched = false
 
+  var pendingOutput : [UInt8] = []
+
   public init() {}
 
   /*
@@ -162,13 +158,27 @@ public actor DarwinProcess {
    }
    */
 
+  public func kill(_ n : Int32 = SIGTERM) {
+    Darwin.kill(pid, SIGTERM)
+  }
+
+  public func getOutput() -> [UInt8] {
+    let k = pendingOutput
+    pendingOutput = []
+    return k
+  }
+
+  func appendOutput(_ b : [UInt8]) {
+    pendingOutput.append(contentsOf: b)
+  }
+
   public static func launch(
     _ executablePath: String,
     withStdin: (any Stdinable)? = nil,
     args arguments: any Arguable...,
     env : [String : String] = [:],
     cd : FilePath? = nil,
-    captureOutput: CaptureOutput = .asBytes
+    captureOutput: Bool = true
   ) async throws(POSIXErrno) -> DarwinProcess {
     let p = DarwinProcess()
     let _ = try await p.launch(executablePath, withStdin: withStdin, args: arguments, env: env, cd: cd, captureOutput: captureOutput)
@@ -181,7 +191,7 @@ public actor DarwinProcess {
     args arguments: any Arguable...,
     env : [String : String] = [:],
     cd : FilePath? = nil,
-    captureOutput: CaptureOutput = .asBytes
+    captureOutput: Bool = true
   ) throws(POSIXErrno) -> pid_t {
     return try launch(executablePath, withStdin: withStdin, args: arguments, env: env, cd: cd, captureOutput: captureOutput)
   }
@@ -194,7 +204,7 @@ public actor DarwinProcess {
     args arguments: [any Arguable] = [],
     env : [String : String] = [:],
     cd : FilePath? = nil,
-    captureOutput: CaptureOutput = .asBytes
+    captureOutput: Bool = true
   ) throws(POSIXErrno) -> pid_t {
     // Pipes for stdout/stderr (always captured)
     if launched { fatalError("already launched once") }
@@ -210,8 +220,7 @@ public actor DarwinProcess {
     var stdoutW : FileDescriptor? = nil
     var stderrW : FileDescriptor
 
-    if case .ignore = captureOutput {
-    } else {
+    if captureOutput {
       do {
         (stdoutR, stdoutW) = try FileDescriptor.pipe()
       } catch(let e as Errno) {
@@ -219,13 +228,11 @@ public actor DarwinProcess {
       } catch(let e) {
         throw log(POSIXErrno(-1, fn: "pipe", reason: "creating stdout pipe: \(e)"))
       }
-      if case .callback = captureOutput {
         do {
           try stdoutR?.makeNonBlocking()
         } catch(let e) {
           throw POSIXErrno(e.rawValue)
         }
-      }
     }
 
     do {
@@ -309,7 +316,7 @@ public actor DarwinProcess {
     }
 
     do {
-      if case .ignore = captureOutput {
+      if !captureOutput {
         let rcInheritStdout = posix_spawn_file_actions_addinherit_np(&actions, STDOUT_FILENO)
         if rcInheritStdout != 0 {
           throw log(POSIXErrno(rcInheritStdout, fn: "posix_spawn_file_actions_addinherit_np(stdout)"))
@@ -419,25 +426,17 @@ public actor DarwinProcess {
     if let fd = openedStdinFDToCloseInParent { try? fd.close() }
 
 
-    switch captureOutput {
-      case .asBytes:
+    if captureOutput {
         let so = stdoutR!
+        pendingOutput = []
         readerTask = Task.detached {
-          let res = try so.readAllBytes()
-          return res
-        }
-      case .ignore:
-        break
-      case .callback(let cb):
-        let so = stdoutR!
-        readerTask = Task.detached {@Sendable in
           while true {
             try so.waitUntilReadable()
             let res = try so.readAvailableBytes()
             if res.isEmpty {
               return []
             } else {
-              cb(res)
+              await self.appendOutput(res)
             }
           }
         }
@@ -492,7 +491,7 @@ public actor DarwinProcess {
     args arguments: any Arguable...,
     env : [String : String] = [:],
     cd : FilePath? = nil,
-    captureOutput: CaptureOutput = .asBytes
+    captureOutput: Bool = true
   ) async throws -> Output {
     return try await run(executablePath, withStdin: withStdin, args: arguments, env: env, cd: cd, captureOutput: captureOutput)
   }
@@ -503,7 +502,7 @@ public actor DarwinProcess {
     args arguments: [any Arguable] = [],
     env : [String : String] = [:],
     cd : FilePath? = nil,
-    captureOutput: CaptureOutput = .asBytes
+    captureOutput: Bool = true
   ) async throws -> Output {
 
     let _ = try launch(
@@ -531,7 +530,7 @@ public actor DarwinProcess {
     async let _ = feederTask?.value
     async let stderr = errorTask!.value
 
-    async let stdout = readerTask?.value ?? [UInt8]()
+    async let stdout = pendingOutput 
 
 
     //      let (stdout, stderr, terminationStatus, _) = try await (readerTask == nil ? [UInt8]() : readerTask!.value, errorTask!.value, status, feederTask!.value)
