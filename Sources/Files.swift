@@ -1,5 +1,6 @@
+
 // Modernized by Robert "r0ml" Lefkowitz <code@liberally.net> in 2025
-// from a files containing the following notices:
+// from a file containing the following notices:
 
 /*
  * Copyright (c) 1997 Todd C. Miller <Todd.Miller@courtesan.com>
