@@ -372,6 +372,10 @@ public actor DarwinProcess {
     flags |= Int16(POSIX_SPAWN_SETSIGMASK)
     flags |= Int16(POSIX_SPAWN_CLOEXEC_DEFAULT)
 
+    if let _ = env["SHELLDEBUGGING"] {
+      flags |= Int16(POSIX_SPAWN_START_SUSPENDED)
+    }
+
     guard posix_spawnattr_setflags(&attr, flags) == 0 else {
       throw log(POSIXErrno(fn: "posix_spawnattr_setflags"))
     }
