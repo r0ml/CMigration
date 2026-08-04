@@ -613,11 +613,9 @@ public class BSDGetopt {
       if place.isEmpty { nargv.removeFirst() }
     } else {
       // Option-argument is either the rest of this argument or the entire next argument.
+      let gnuopt = ostr.contains("\(optopt)::" )
       if !place.isEmpty {
         optarg = place
-      } else if ostr.contains("\(optopt)::") {
-        // GNU Extension, for optional arguments if the rest of the argument is empty, we return ""
-        optarg = ""
       } else if nargv.count > 1 {
         nargv.removeFirst()
         optarg = nargv.first!
@@ -629,7 +627,11 @@ public class BSDGetopt {
         if ostr.first == ":" {
           return (":", "")
         }
-        throw CmdErr(1, "\(PROGNAME): option requires an argument \(optopt)")
+        if gnuopt {
+          optarg = ""
+        } else {
+          throw CmdErr(1, "\(PROGNAME): option requires an argument \(optopt)")
+        }
       }
       place = ""
       if !nargv.isEmpty { nargv.removeFirst() }
