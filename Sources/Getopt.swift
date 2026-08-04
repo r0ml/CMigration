@@ -617,8 +617,12 @@ public class BSDGetopt {
       if !place.isEmpty {
         optarg = place
       } else if nargv.count > 1 {
-        nargv.removeFirst()
-        optarg = nargv.first!
+        if gnuopt && nargv[1].first == "-" {
+          optarg == ""
+        } else {
+          nargv.removeFirst()
+          optarg = nargv.first!
+        }
       } else {
         // option-argument absent
         if !nargv.isEmpty { nargv.removeFirst() }
