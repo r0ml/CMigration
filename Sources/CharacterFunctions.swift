@@ -138,6 +138,20 @@ public func regerror(_ n : Int32, _ regx : Darwin.regex_t )  -> String {
   return p
 }
 
+extension String {
+  public func cFormat(_ args : CVarArg...) -> String {
+    return CMigration.cFormat(self, args)
+  }
+
+  public func cFormat(_ args : [CVarArg]) -> String {
+    return CMigration.cFormat(self, args)
+  }
+}
+
+public func cFormat(_ format: String, _ args : CVarArg...) -> String {
+  return cFormat(format, args)
+}
+
 /// Formats a string using a C-style `printf` format and a variadic argument list.
 ///
 /// The output is decoded as ISO Latin-1 to preserve non-ASCII byte values.
@@ -146,13 +160,23 @@ public func regerror(_ n : Int32, _ regx : Darwin.regex_t )  -> String {
 ///   - format: A `printf`-style format string.
 ///   - args: Zero or more `CVarArg` values matching the format specifiers.
 /// - Returns: The formatted string.
-public func cFormat(_ format: String, _ args: CVarArg...) -> String {
-    let bufferSize = 1024
-    var buffer = [UInt8](repeating: 0, count: bufferSize)
+public func cFormat(_ format: String, _ args: [CVarArg]) -> String {
 
-  return buffer.withUnsafeMutableBufferPointer { ptr in
+  for (i,a) in args.enumerated() {
+    if a is String {
+      return (a as! String).withCString {
+        let newa = args[0..<i] + [$0] + args[i+1..<args.count]
+        return cFormat(format, Array(newa))
+      }
+    }
+  }
+
+  let bufferSize = withVaList(args) { vaList in
+    1+Int(vsnprintf(nil, 0, format, vaList))
+  }
+  return withUnsafeTemporaryAllocation(of: UInt8.self, capacity: bufferSize) { ptr in
     let n = withVaList(args) { vaPtr in
-      vsnprintf(ptr.baseAddress!, bufferSize, format, vaPtr)
+      vsnprintf(ptr.baseAddress, bufferSize, format, vaPtr)
     }
     let pp = UnsafeBufferPointer(start: ptr.baseAddress!, count: Int(n) )
     return String(decoding: pp, as: ISOLatin1.self)
@@ -169,15 +193,19 @@ public func cFormat(_ format: String, _ args: CVarArg...) -> String {
 ///   - args: The string argument.
 /// - Returns: The formatted string.
 public func cFormat(_ format: String, _ args: String) -> String {
-  return args.withCString { c in cFormat(format, c) }
+  return args.withCString { c in cFormat(format, [c]) }
 }
 
-extension Substring {
+extension StringProtocol {
+  public func trimming(_ shouldTrim: any StringProtocol) -> any StringProtocol {
+    return trimming(Array(shouldTrim))
+  }
+
   /// Returns a copy of the substring with leading and trailing characters from `shouldTrim` removed.
   ///
   /// - Parameter shouldTrim: The set of characters to strip from both ends.
   /// - Returns: A sub-slice with the specified characters trimmed.
-  public func trimming(_ shouldTrim: [Character]) -> Substring {
+  public func trimming(_ shouldTrim: [Character]) -> any StringProtocol {
     var start = startIndex
     var end = endIndex
 
@@ -394,16 +422,52 @@ func firstInvalidUTF8Index(in bytes: [UInt8]) -> Int? {
 ///
 /// - Returns: A `Unicode.Encoding.Type` for `UTF-8`, `ISO-8859-1`, or `UTF-16`;
 ///   `nil` for all other codeset names.
-func getStringEncoding() -> (any Unicode.Encoding.Type)? {
-  let codeset = String(cString: nl_langinfo(CODESET))
-  switch codeset.uppercased() {
-  case "UTF-8":
-    return UTF8.self
-  case "ISO-8859-1", "LATIN1":
-    return ISOLatin1.self
-  case "UTF-16":
-    return UTF16.self
-  default:
-    return nil
+extension Environment {
+  public static func getStringEncoding() -> (any Unicode.Encoding.Type)? {
+    let codeset = String(cString: nl_langinfo(CODESET))
+    switch codeset.uppercased() {
+      case "UTF-8":
+        return Unicode.UTF8.self
+      case "ISO8859-1", "LATIN1":
+        // I define ISOLatin1
+        return ISOLatin1.self
+      case "UTF-16":
+        return Unicode.UTF16.self
+      case "US-ASCII":
+        return Unicode.ASCII.self
+      default:
+        debugPrint(codeset)
+        return nil
+    }
   }
+}
+
+import Playgrounds
+#Playground {
+  let beforeLocale = Environment.getStringEncoding()
+  setlocale(LC_CTYPE, "en_US.UTF-8")
+  let afterLocale = Environment.getStringEncoding()
+  setlocale(LC_CTYPE, "en_US.ISO8859-1")
+  let latinLocale = Environment.getStringEncoding()
+
+  print(
+    beforeLocale.debugDescription,
+    afterLocale.debugDescription,
+    latinLocale.debugDescription
+  )
+
+}
+
+#Playground {
+  debugPrint("    abcd    ".trimming(" "))
+  debugPrint(Substring("    abcd    ").trimming(" "))
+
+  debugPrint("abc".withCString {
+    cFormat("%8d %c %s", [123, UInt(44), $0])
+  })
+
+  debugPrint(cFormat("%8d %c %s", [123, UInt(44), "abcd"]))
+
+  debugPrint(cFormat("%8d %c %s", 123, UInt(44), "abcde"))
+
 }
