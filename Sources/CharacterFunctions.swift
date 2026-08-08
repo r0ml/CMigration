@@ -4,8 +4,17 @@
 import System
 import Darwin
 
+/// A forward Unicode parser that maps each byte directly to a Latin-1 scalar.
+///
+/// Used as the `ForwardParser` associated type of ``ISOLatin1``.
 public struct ForwardParserX : Unicode.Parser {
+  /// Creates a new forward parser.
   public init() {}
+
+  /// Reads the next byte from `input` and wraps it in a single-element collection.
+  ///
+  /// - Parameter input: An iterator over `UInt8` bytes.
+  /// - Returns: `.valid` with the next byte, or `.emptyInput` when the iterator is exhausted.
   public mutating func parseScalar<I>(from input: inout I) -> Unicode.ParseResult<CollectionOfOne<UInt8>> where I : IteratorProtocol, I.Element == UInt8 {
     if let z = input.next() {
       let x = CollectionOfOne(UInt8(z) )
@@ -15,11 +24,21 @@ public struct ForwardParserX : Unicode.Parser {
     }
   }
   
+  /// The encoding this parser serves.
   public typealias Encoding = ISOLatin1
 }
 
+/// A reverse Unicode parser that maps each byte directly to a Latin-1 scalar.
+///
+/// Used as the `ReverseParser` associated type of ``ISOLatin1``.
 public struct ReverseParserX : Unicode.Parser {
+  /// Creates a new reverse parser.
   public init() {}
+
+  /// Reads the next byte from `input` and wraps it in a single-element collection.
+  ///
+  /// - Parameter input: An iterator over `UInt8` bytes.
+  /// - Returns: `.valid` with the next byte, or `.emptyInput` when the iterator is exhausted.
   public mutating func parseScalar<I>(from input: inout I) -> Unicode.ParseResult<CollectionOfOne<UInt8>> where I : IteratorProtocol, I.Element == UInt8 {
     if let z = input.next() {
       let x = CollectionOfOne(UInt8(z) )
@@ -29,51 +48,59 @@ public struct ReverseParserX : Unicode.Parser {
     }
   }
   
+  /// The encoding this parser serves.
   public typealias Encoding = ISOLatin1
-  
-  
 }
 
+/// A `Unicode.Encoding` implementation for ISO Latin-1 (ISO 8859-1).
+///
+/// Each code unit is a single byte, and each byte value maps directly to the
+/// corresponding Unicode scalar (U+0000–U+00FF).
 public struct ISOLatin1: Unicode.Encoding {
+  /// The replacement character used when encoding fails (U+0000).
   public static let encodedReplacementCharacter: CollectionOfOne<UInt8> = .init(UInt8(0))
   
+  /// Decodes a single ISO Latin-1 code unit into a Unicode scalar.
+  ///
+  /// - Parameter content: A one-element collection holding the byte to decode.
+  /// - Returns: The Unicode scalar whose value equals the byte value.
   public static func decode(_ content: CollectionOfOne<UInt8>) -> Unicode.Scalar {
     return Unicode.Scalar(content.first!)
   }
   
+  /// Encodes a Unicode scalar into a single ISO Latin-1 byte.
+  ///
+  /// - Parameter content: A Unicode scalar with a value in the range 0–255.
+  /// - Returns: A one-element collection holding the encoded byte, or `nil` if
+  ///   the scalar's value exceeds 255.
   public static func encode(_ content: Unicode.Scalar) -> CollectionOfOne<UInt8>? {
     return CollectionOfOne( UInt8(content.value) )
   }
   
+  /// The code-unit type: a single byte.
   public typealias CodeUnit = UInt8
+  /// The encoded-scalar type: a one-element byte collection.
   public typealias EncodedScalar = CollectionOfOne<UInt8>
+  /// The forward parser type.
   public typealias ForwardParser = ForwardParserX
+  /// The reverse parser type.
   public typealias ReverseParser = ReverseParserX
-  
-/*
-  /// Decodes a single ISO Latin 1 code unit into a Unicode scalar.
-  static func decode(_ input: EncodedScalar) -> UnicodeDecodingResult {
-        guard let first = input.first else {
-            return .emptyInput
-        }
-        let scalar = UnicodeScalar(first)
-        return .scalarValue(scalar)
-    }
-
-    /// Encodes a single Unicode scalar into an ISO Latin 1 code unit.
-  static func encode(_ scalar: UnicodeScalar) -> EncodedScalar {
-        precondition(scalar.value <= 0xFF, "Scalar out of ISO-8859-1 range")
-        return CollectionOfOne(UInt8(scalar.value))
- }
- */
 }
 
+/// Errors thrown when a Unicode scalar cannot be represented in ISO Latin-1.
 enum Latin1EncodingError: Error {
+  /// The scalar's value is greater than 255.
   case scalarOutOfRange(UnicodeScalar)
 }
 
 // get bytes from String encoded as ISOLatin1
 public extension String {
+  /// Encodes the string as ISO Latin-1 bytes.
+  ///
+  /// - Returns: A `[UInt8]` array where each byte corresponds to the Unicode scalar
+  ///   value of the character at that position.
+  /// - Throws: ``Latin1EncodingError/scalarOutOfRange(_:)`` if any scalar has a value
+  ///   greater than 255.
   func isoLatin1() throws -> [UInt8] {
     var result: [UInt8] = []
     result.reserveCapacity(self.unicodeScalars.count)
@@ -90,11 +117,12 @@ public extension String {
   }
 }
 
-
-
-
-
-
+/// Returns a human-readable error message for a POSIX regex error code.
+///
+/// - Parameters:
+///   - n: The error code returned by a `reg*` function.
+///   - regx: The compiled regular expression that produced the error.
+/// - Returns: A string describing the error.
 public func regerror(_ n : Int32, _ regx : Darwin.regex_t )  -> String {
   var re = regx
   let s = withUnsafeMutablePointer(to: &re) { rr in
@@ -110,8 +138,14 @@ public func regerror(_ n : Int32, _ regx : Darwin.regex_t )  -> String {
   return p
 }
 
-
-
+/// Formats a string using a C-style `printf` format and a variadic argument list.
+///
+/// The output is decoded as ISO Latin-1 to preserve non-ASCII byte values.
+///
+/// - Parameters:
+///   - format: A `printf`-style format string.
+///   - args: Zero or more `CVarArg` values matching the format specifiers.
+/// - Returns: The formatted string.
 public func cFormat(_ format: String, _ args: CVarArg...) -> String {
     let bufferSize = 1024
     var buffer = [UInt8](repeating: 0, count: bufferSize)
@@ -125,33 +159,47 @@ public func cFormat(_ format: String, _ args: CVarArg...) -> String {
   }
 }
 
+/// Formats a single string argument using a C-style `printf` format.
+///
+/// This overload avoids the overhead of a variadic `va_list` when exactly one
+/// `String` argument is needed.
+///
+/// - Parameters:
+///   - format: A `printf`-style format string with a single `%s` specifier.
+///   - args: The string argument.
+/// - Returns: The formatted string.
 public func cFormat(_ format: String, _ args: String) -> String {
   return args.withCString { c in cFormat(format, c) }
 }
 
-
-
-
 extension Substring {
-    public func trimming(_ shouldTrim: [Character]) -> Substring {
-        var start = startIndex
-        var end = endIndex
+  /// Returns a copy of the substring with leading and trailing characters from `shouldTrim` removed.
+  ///
+  /// - Parameter shouldTrim: The set of characters to strip from both ends.
+  /// - Returns: A sub-slice with the specified characters trimmed.
+  public func trimming(_ shouldTrim: [Character]) -> Substring {
+    var start = startIndex
+    var end = endIndex
 
-      while start < end && shouldTrim.contains(self[start]) {
-            formIndex(after: &start)
-        }
-
-      while end > start && shouldTrim.contains(self[index(before: end)]) {
-            formIndex(before: &end)
-        }
-
-        return self[start..<end]
+    while start < end && shouldTrim.contains(self[start]) {
+      formIndex(after: &start)
     }
+
+    while end > start && shouldTrim.contains(self[index(before: end)]) {
+      formIndex(before: &end)
+    }
+
+    return self[start..<end]
+  }
 }
 
-
-
 extension StringProtocol {
+  /// Returns the total display width of the string, in terminal column units.
+  ///
+  /// Sums the ``wcwidth`` of each `Character`.  Control characters (which have a
+  /// `wcwidth` of -1) are treated as zero-width.
+  ///
+  /// - Returns: The number of terminal columns required to display the string.
   public func wcwidth() -> Int {
     return self.reduce(0) { (sum : Int, scal : Character) in
       let t = scal.wcwidth
@@ -161,23 +209,22 @@ extension StringProtocol {
   }
 }
 
-
-
-
 extension Character {
 
+  /// `true` if the character has emoji presentation (contains at least one scalar
+  /// with `isEmojiPresentation` or `isEmoji` set).
   public var isEmoji : Bool {
-    // Most emoji-presenting characters have at least one scalar with isEmojiPresentation = true
-    // or are in the emoji modifier/base ranges
     return self.unicodeScalars.contains { scalar in
       scalar.properties.isEmojiPresentation || scalar.properties.isEmoji
     }
   }
 
-  /// Returns the display width of a Swift `Character`, based on its visible representation in a terminal.
-  /// Returns -1 if it contains any control characters.
+  /// Returns the display width of the character in terminal columns.
+  ///
+  /// Returns `-1` if the character contains any control characters (values below
+  /// U+0020 or in the range U+007F–U+009F).  Emoji that are at least two columns
+  /// wide are normalised to exactly 2.
   public var wcwidth : Int {
-    // If any scalar in the cluster is a control character, return -1
     for scalar in self.unicodeScalars {
       let v = scalar.value
       if (v < 0x20) || (v >= 0x7F && v < 0xA0) {
@@ -185,13 +232,11 @@ extension Character {
       }
     }
 
-    // Count visible column width across all scalars
     var width = 0
     for scalar in self.unicodeScalars {
       width += scalar.wcwidth
     }
 
-    // Many grapheme clusters are emoji or wide and display as a single unit — normalize to 2 if appropriate
     if self.isEmoji && width >= 2 {
       return 2
     }
@@ -199,84 +244,60 @@ extension Character {
     return width
   }
 
-
-  /// Calculates the display width of a character.
-  /// Swift does not have a direct equivalent to C's `wcwidth`, so we provide a basic implementation.
-/*  public func wcwidth(_ ch: Character) -> Int {
-    // Simplified: Most characters occupy width 1. You can enhance this with more accurate width calculations if needed.
-    let scalars = String(ch).unicodeScalars
-    for scalar in scalars {
-      if scalar.properties.isIdeographic {
-        return 2
+  /// Returns `true` if the character is printable and not a space.
+  ///
+  /// Equivalent to POSIX `iswgraph`.  Returns `false` for control characters,
+  /// format characters, surrogates, private-use code points, unassigned code
+  /// points, and any category of separator.
+  public var iswgraph : Bool {
+    for scalar in self.unicodeScalars {
+      switch scalar.properties.generalCategory {
+      case .control, .format, .surrogate, .privateUse, .unassigned,
+           .spaceSeparator, .lineSeparator, .paragraphSeparator:
+        return false
+      default:
+        continue
       }
     }
-    return 1
-  }
-*/
 
-  /// Returns true if the character is printable and not a space,
-  /// equivalent to POSIX `iswgraph`.
-  public var iswgraph : Bool {
-      // Reject control characters or unassigned scalars
-      for scalar in self.unicodeScalars {
-          switch scalar.properties.generalCategory {
-          case .control, .format, .surrogate, .privateUse, .unassigned,
-               .spaceSeparator, .lineSeparator, .paragraphSeparator:
-              return false
-          default:
-              continue
-          }
-      }
+    if self.isWhitespace {
+      return false
+    }
 
-      // Reject characters composed entirely of whitespace
-      if self.isWhitespace {
-          return false
-      }
-
-      return true
+    return true
   }
 
-
-  /// Returns `true` if the given Unicode scalar is considered printable.
-  /// - Parameter scalar: A UnicodeScalar to test.
-  /// - Returns: A Boolean value that is `true` if the scalar is printable.
+  /// Returns `true` if the character is printable (including spaces).
+  ///
+  /// Equivalent to POSIX `iswprint`.  For ASCII, only U+0020–U+007E are considered
+  /// printable.  For non-ASCII, characters in the Latin Supplement block
+  /// (U+0080–U+00FF) are not printable; all others that are not control, format,
+  /// surrogate, private-use, or unassigned are considered printable.
   public var iswprint : Bool {
-      // For ASCII, only characters between space (0x20) and tilde (0x7E) are printable.
     let scalars = self.unicodeScalars
     if scalars.count > 1 { return true }
     let scalar = scalars.first!
-      if scalar.isASCII {
-        return scalar.value >= 0x20 && scalar.value <= 0x7E
-      } else {
-          // For non-ASCII characters, we consider the scalar printable if its Unicode
-          // general category is not one of the following:
-          //   - Control (.control)
-          //   - Format (.format)
-          //   - Surrogate (.surrogate)
-          //   - Private Use (.privateUse)
-          //   - Unassigned (.unassigned)
-        if scalar.value < 256 { return false }
-          switch scalar.properties.generalCategory {
-          case .control, .format, .surrogate, .privateUse, .unassigned:
-              return false
-          default:
-              return true
-          }
+    if scalar.isASCII {
+      return scalar.value >= 0x20 && scalar.value <= 0x7E
+    } else {
+      if scalar.value < 256 { return false }
+      switch scalar.properties.generalCategory {
+      case .control, .format, .surrogate, .privateUse, .unassigned:
+        return false
+      default:
+        return true
       }
+    }
   }
-
-
-
-
-
-
 }
 
 extension UnicodeScalar {
 
-  /// Approximates scalar width used inside `wcwidth(_:)`
+  /// Returns the terminal display width of the scalar in columns.
+  ///
+  /// Combining marks return 0; emoji-presentation scalars and East Asian Wide
+  /// characters return 2; all other scalars return 1.
   public var wcwidth : Int {
-    // Combining marks
     switch self.properties.generalCategory {
       case .nonspacingMark, .enclosingMark:
         return 0
@@ -284,12 +305,10 @@ extension UnicodeScalar {
         break
     }
 
-    // Emoji with presentation form
     if self.properties.isEmojiPresentation {
       return 2
     }
 
-    // Wide characters (see previous wide ranges)
     let wideRanges: [ClosedRange<UInt32>] = [
       0x1100...0x115F, 0x2329...0x232A, 0x2E80...0xA4CF, 0xAC00...0xD7A3,
       0xF900...0xFAFF, 0xFE10...0xFE19, 0xFE30...0xFE6F, 0xFF00...0xFF60,
@@ -302,80 +321,89 @@ extension UnicodeScalar {
     return 1
   }
 
-  /// Returns `true` if the given Unicode scalar is a printable, non-space character.
-  /// This mimics the behavior of POSIX `iswgraph`.
+  /// Returns `true` if the scalar is a printable, non-space character.
+  ///
+  /// Equivalent to POSIX `iswgraph` applied to a single scalar.
   public var iswgraph : Bool {
-      if self.isASCII {
-          // ASCII printable non-space: 0x21 ('!') to 0x7E ('~')
-          return (0x21...0x7E).contains(self.value)
-      } else {
-          // Non-ASCII: Must be printable and not in any space category
-          switch self.properties.generalCategory {
-          case .control, .format, .surrogate, .privateUse, .unassigned,
-               .spaceSeparator, .lineSeparator, .paragraphSeparator:
-              return false
-          default:
-              return true
-          }
+    if self.isASCII {
+      return (0x21...0x7E).contains(self.value)
+    } else {
+      switch self.properties.generalCategory {
+      case .control, .format, .surrogate, .privateUse, .unassigned,
+           .spaceSeparator, .lineSeparator, .paragraphSeparator:
+        return false
+      default:
+        return true
       }
+    }
+  }
+}
+
+/// Decodes a UTF-16 buffer into a Swift `String`, returning `nil` if the buffer
+/// contains invalid UTF-16 code units.
+///
+/// - Parameter buffer: A `[UInt16]` array of UTF-16 code units.
+/// - Returns: The decoded `String`, or `nil` if invalid UTF-16 is encountered.
+public func validatedStringFromUTF16Buffer(_ buffer: [UInt16]) -> String? {
+  var decoder = UTF16()
+  var iterator = buffer.makeIterator()
+  var string = ""
+
+  decodeLoop: while true {
+    switch decoder.decode(&iterator) {
+    case .scalarValue(let scalar):
+      string.unicodeScalars.append(scalar)
+    case .emptyInput:
+      break decodeLoop
+    case .error:
+      return nil
+    }
   }
 
+  return string
 }
 
-
-
-public func validatedStringFromUTF16Buffer(_ buffer: [UInt16]) -> String? {
-    var decoder = UTF16()
-    var iterator = buffer.makeIterator()
-    var string = ""
-
-    decodeLoop: while true {
-        switch decoder.decode(&iterator) {
-        case .scalarValue(let scalar):
-            string.unicodeScalars.append(scalar)
-        case .emptyInput:
-            break decodeLoop
-        case .error:
-            return nil  // invalid UTF-16
-        }
-    }
-
-    return string
-}
-
+/// Returns the index of the first invalid UTF-8 byte sequence in the given byte array,
+/// or `nil` if all bytes form valid UTF-8.
+///
+/// - Parameter bytes: The byte array to validate.
+/// - Returns: The zero-based index of the first invalid byte, or `nil` if the
+///   entire array is valid UTF-8.
 func firstInvalidUTF8Index(in bytes: [UInt8]) -> Int? {
-    var decoder = UTF8()
-    var iterator = bytes.makeIterator()
-    var index = 0
+  var decoder = UTF8()
+  var iterator = bytes.makeIterator()
+  var index = 0
 
-    while true {
-        let decoding = decoder.decode(&iterator)
-        switch decoding {
-        case .scalarValue:
-            // Valid scalar, move to next
-            index += 1
-        case .emptyInput:
-            // Reached end of input
-            return nil
-        case .error:
-            // Found invalid byte
-            return index
-        }
+  while true {
+    let decoding = decoder.decode(&iterator)
+    switch decoding {
+    case .scalarValue:
+      index += 1
+    case .emptyInput:
+      return nil
+    case .error:
+      return index
     }
+  }
 }
 
+/// Returns the `Unicode.Encoding` type that corresponds to the current locale's character set.
+///
+/// Uses `nl_langinfo(CODESET)` to determine the encoding name.  Returns `nil` for
+/// any encoding that is not explicitly handled.
+///
+/// - Returns: A `Unicode.Encoding.Type` for `UTF-8`, `ISO-8859-1`, or `UTF-16`;
+///   `nil` for all other codeset names.
 func getStringEncoding() -> (any Unicode.Encoding.Type)? {
   let codeset = String(cString: nl_langinfo(CODESET))
-    switch codeset.uppercased() {
-    case "UTF-8":
-        return UTF8.self
-    case "ISO-8859-1", "LATIN1":
-        return ISOLatin1.self
-    case "UTF-16":
-        return UTF16.self
-//    case "US-ASCII", "ASCII":
-//        return .ascii
-    default:
-        return nil
-    }
+  switch codeset.uppercased() {
+  case "UTF-8":
+    return UTF8.self
+  case "ISO-8859-1", "LATIN1":
+    return ISOLatin1.self
+  case "UTF-16":
+    return UTF16.self
+  default:
+    return nil
+  }
 }

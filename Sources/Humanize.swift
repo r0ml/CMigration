@@ -40,23 +40,47 @@
 // FIXME: This came from Libutil
 // if libutil is ported completely, this should go there.
 
-/* Values for humanize_number(3)'s flags parameter. */
+/// Formatting flags for ``humanize_number(_:_:_:_:_:)``.
+///
+/// Mirrors the `HN_*` constants from BSD's `<libutil.h>`.
 public struct HumanizeFlags : OptionSet, Sendable {
+  /// The raw integer bitmask.
   public let rawValue: Int
 
+  /// Creates a `HumanizeFlags` from a raw bitmask value.
   public init(rawValue: Int) {
     self.rawValue = rawValue
   }
-  public static let decimal = Self(rawValue: 1 << 0) // 1
-  public static let nospace = Self(rawValue: 1 << 1) // 2
-  public static let b = Self(rawValue: 1 << 2) // 4
-  public static let divisor_1000 = Self(rawValue: 1 << 3) // 8
-  public static let iec_prefixes = Self(rawValue: 1 << 4) // 0x10
+
+  /// Display a decimal fraction when the value rounds to less than 10 (e.g. `1.5 K`).
+  public static let decimal = Self(rawValue: 1 << 0)
+  /// Suppress the space between the number and the unit prefix (e.g. `1.5K` instead of `1.5 K`).
+  public static let nospace = Self(rawValue: 1 << 1)
+  /// Include a `B` (bytes) suffix at scale 0.
+  public static let b = Self(rawValue: 1 << 2)
+  /// Use 1000 as the divisor instead of 1024.
+  public static let divisor_1000 = Self(rawValue: 1 << 3)
+  /// Use IEC binary prefixes (`Ki`, `Mi`, `Gi`, …) instead of the traditional ones.
+  public static let iec_prefixes = Self(rawValue: 1 << 4)
 }
 
 fileprivate typealias HFS = (divisor: Int, scale: Int, divisordeccut : Int)
 fileprivate let maxscale = 6
 
+/// Formats a byte count as a human-readable string with an appropriate SI/binary prefix.
+///
+/// Mirrors the BSD `humanize_number(3)` function.
+///
+/// - Parameters:
+///   - len: The total number of characters available in the output buffer (governs which
+///     scale is chosen automatically when `scale` is `nil`).
+///   - quotientx: The integer value to format (typically a byte count).
+///   - suffix: A suffix string appended after the prefix (e.g. `"B"` for bytes).
+///   - scale: An explicit scale index (0 = bytes, 1 = K, …, 6 = E); pass `nil` to
+///     auto-scale so the result fits within `len` characters.
+///   - flags: Formatting options; see ``HumanizeFlags``.
+/// - Returns: The formatted string, or `nil` if the value cannot fit in `len` characters
+///   or if contradictory flags are supplied.
 public func humanize_number(_ len : Int, _ quotientx : Int, _ suffix : String, _ scale : UInt?, _ flags : HumanizeFlags) -> String? {
   var scx : Int
   if let sx = gshn(len, quotientx, suffix, flags) {
@@ -72,33 +96,24 @@ public func humanize_number(_ len : Int, _ quotientx : Int, _ suffix : String, _
   }
 }
 
-/// get scale for humanize_number, or fail with nil
+/// Computes the automatic scale index for ``humanize_number(_:_:_:_:_:)``.
+///
+/// Returns `nil` when the value cannot be represented within `len` characters,
+/// or when mutually exclusive flags are set.
 fileprivate func gshn(_ len : Int, _ quotientx : Int, _ suffix : String, _ flags : HumanizeFlags) -> Int? {
-  /* Values for humanize_number(3)'s scale parameter. */
-
-  /*
-   const char *prefixes, *sep;
-   int  i, r, remainder, s1, s2, sign;
-   int  divisordeccut;
-   int64_t  divisor, max;
-   size_t  baselen;
-   */
-
   var quotient = quotientx
 
   if flags.contains(.divisor_1000) && flags.contains(.iec_prefixes) {
     return nil
   }
 
-  /* setup parameters */
-
   var (divisor, divisordeccut, _, baselen) = gp(flags, 0)
 
   if quotient < 0 {
     quotient = -quotient
-    baselen += 2    /* sign, digit */
+    baselen += 2
   } else {
-    baselen += 1    /* digit */
+    baselen += 1
   }
   if flags.contains(.nospace) {
   } else {
@@ -112,10 +127,7 @@ fileprivate func gshn(_ len : Int, _ quotientx : Int, _ suffix : String, _ flags
 
   var ii = len - baselen
 
-  // what follows calculates scale -- but not necessary if scale provided
-  //  if (scale & (HN_AUTOSCALE | HN_GETSCALE)) {
   var max = 1
-  /* See if there is additional columns can be used. */
   while ii > 0 && max <= Int.max / 10 {
     ii -= 1
     max *= 10
@@ -123,26 +135,21 @@ fileprivate func gshn(_ len : Int, _ quotientx : Int, _ suffix : String, _ flags
 
   var remainder = 0
   var i = 0
-  /*
-   * Divide the number until it fits the given column.
-   * If there will be an overflow by the rounding below,
-   * divide once more.
-   */
-   while
-       (quotient >= max || (quotient == max - 1 &&
-                            (remainder >= divisordeccut || remainder >=
-                             divisor / 2))) && i < maxscale {
+  while
+      (quotient >= max || (quotient == max - 1 &&
+                           (remainder >= divisordeccut || remainder >=
+                            divisor / 2))) && i < maxscale {
     remainder = quotient % divisor;
     quotient /= divisor;
-     i += 1
+    i += 1
   }
 
-  // This is the calculated scale
   return i
 }
 
 fileprivate typealias GP = (divisor: Int, divisordeccut: Int, prefix: String, baselen : Int)
 
+/// Returns the divisor, decimal-cut threshold, prefix string, and base length for the given flags and scale.
 fileprivate func gp(_ flags: HumanizeFlags, _ scale : Int) -> GP {
   var prefixes : [String]
   var divisor : Int
@@ -155,15 +162,6 @@ fileprivate func gp(_ flags: HumanizeFlags, _ scale : Int) -> GP {
   var baselen : Int
 
   if flags.contains(.iec_prefixes) {
-    /*
-     * Use the prefixes for power of two recommended by
-     * the International Electrotechnical Commission
-     * (IEC) in IEC 80000-3 (i.e. Ki, Mi, Gi...).
-     *
-     * HN_IEC_PREFIXES implies a divisor of 1024 here
-     * (use of HN_DIVISOR_1000 would have triggered
-     * an assertion earlier).
-     */
     baselen = 2
     divisor = 1024
     divisordeccut = 973  /* ceil(.95 * 1024) */
@@ -194,18 +192,16 @@ fileprivate func gp(_ flags: HumanizeFlags, _ scale : Int) -> GP {
     }
   }
   return (divisor: divisor, divisordeccut: divisordeccut, prefix: scale2prefix(scale), baselen: baselen)
-
 }
 
 import locale_h
 
+/// Formats the value using a pre-computed scale and returns the final string.
 fileprivate func hn(_ len : Int, _ quotientx : Int, _ suffix : String, _ scale : Int, _ flags : HumanizeFlags) -> String? {
 
   var quotient = quotientx
   var remainder = 0
   var (divisor, divisordeccut, prefix, _) = gp(flags, scale)
-
-
 
   var sign : Int
   var sep : String
@@ -222,7 +218,6 @@ fileprivate func hn(_ len : Int, _ quotientx : Int, _ suffix : String, _ scale :
     sep = " ";
   }
 
-
   for i in 0..<scale {
     remainder = quotient % divisor;
     quotient /= divisor;
@@ -230,11 +225,6 @@ fileprivate func hn(_ len : Int, _ quotientx : Int, _ suffix : String, _ scale :
 
   var i = scale
 
-  /* If a value <= 9.9 after rounding and ... */
-  /*
-   * XXX - should we make sure there is enough space for the decimal
-   * place and if not, don't do HN_DECIMAL?
-   */
   if ((quotient == 9 && remainder < divisordeccut) || quotient < 9) &&
       i > 0 && flags.contains(.decimal) {
     let s1 = quotient + ((remainder * 10 + divisor / 2) / divisor / 10)

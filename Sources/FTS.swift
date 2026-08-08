@@ -4,23 +4,38 @@
 import Darwin
 import Synchronization
 
+/// Re-export of the `FTS_ROOTLEVEL` constant from Darwin.
 public let FTS_ROOTLEVEL = Darwin.FTS_ROOTLEVEL
 
+/// A three-way comparison result, compatible with the sort callbacks used by ``FTSWalker``.
 public enum ComparisonResult : Int32 {
-    case orderedAscending = -1
-    case orderedSame = 0
-    case orderedDescending = 1
+  /// The left operand comes before the right operand.
+  case orderedAscending = -1
+  /// The two operands are equivalent in sort order.
+  case orderedSame = 0
+  /// The left operand comes after the right operand.
+  case orderedDescending = 1
 }
 
+/// Shared mutable state for the C-level `fts_open` sort shim.
+///
+/// The `fts` API requires a plain C function pointer for sorting, so we must
+/// store the Swift comparison closure and the owning ``FTSWalker`` in global
+/// state guarded by a `Mutex`.
 final class Context {
+  /// The Swift comparison closure forwarded from ``FTSWalker``.
   var fn : (@Sendable (FTSEntry, FTSEntry) -> ComparisonResult)? = nil
+  /// The owning walker, used to reconstruct ``FTSEntry`` values in the shim.
   var fe : FTSWalker? = nil
 }
 
+/// Global context used by the C-level ``sort_shim`` callback.
 let globalContext = Mutex<Context>(Context())
 
-// Sort FTS results in lexicographical order.
-// from `find`
+/// C-compatible sort callback forwarded to `fts_open`.
+///
+/// Wraps two raw `FTSENT` pointers as ``FTSEntry`` values, then delegates to
+/// the Swift closure stored in ``globalContext``.
 fileprivate func sort_shim(s1: UnsafeMutablePointer<UnsafePointer<FTSENT>?>?, s2: UnsafeMutablePointer<UnsafePointer<FTSENT>?>?) -> Int32 {
   let fe = globalContext.withLock { $0.fe }
   let a = FTSEntry(fe, UnsafeMutablePointer(mutating: s1!.pointee!) )
@@ -34,31 +49,54 @@ fileprivate func sort_shim(s1: UnsafeMutablePointer<UnsafePointer<FTSENT>?>?, s2
   }
 }
 
+/// Returns the C function pointer for ``sort_shim``, after storing the comparison closure
+/// in ``globalContext``.
+///
+/// - Parameters:
+///   - fe: The owning ``FTSWalker`` (may be `nil`).
+///   - fn: The Swift comparison closure to store.
+/// - Returns: A C function pointer suitable for passing to `fts_open`.
 fileprivate func get_sort_shim(_ fe : FTSWalker?, _ fn : ( @Sendable (FTSEntry, FTSEntry) -> ComparisonResult)?) -> (@convention(c) (UnsafeMutablePointer<UnsafePointer<FTSENT>?>?, UnsafeMutablePointer<UnsafePointer<FTSENT>?>?) -> Int32)? {
-//  guard let fn else { return nil }
   globalContext.withLock { @Sendable in
-      $0.fn = fn
+    $0.fn = fn
   }
   return sort_shim
 }
 
+/// Classifies a file-tree-walk entry, mirroring the `FTS_*` info constants from `<fts.h>`.
 public enum FTSInfo : Int {
-  case D       //  A directory being visited in pre-order.
-  case DC      //  A directory that causes a cycle in the tree. (The fts_cycle field of the FTSENT structure will be filled in as well.)
-  case DEFAULT //  Any FTSENT structure that represents a file type not explicitly described by one of the other fts_info values.
-  case DNR     // A directory which cannot be read. This is an error return, and the fts_errno field will be set to indicate what caused the error.
-  case DOT     // A file named .​ or ..​ which was not specified as a file name to fts_open() or fts_open_b() (see FTS_SEEDOT) .
-  case DP      // A directory being visited in post-order. The contents of the FTSENT structure will be unchanged from when it was returned in pre-order, i.e. with the fts_info field set to FTS_D.
-  case ERR     // This is an error return, and the fts_errno field will be set to indicate what caused the error.
-  case F       // A regular file.
-  case NS      // A file for which no stat(2) information was available. The contents of the fts_statp field are undefined. This is an error return, and the fts_errno field will be set to indicate what caused the error.
-  case NSOK    // A file for which no stat(2) information was requested. The contents of the fts_statp field are undefined.
-  case SL      // A symbolic link.
-  case SLNONE  // A symbolic link with a non-existent target. The contents of the fts_statp field reference the file characteristic information for the symbolic link itself.
-  case W       // Whiteout object
-
+  /// A directory being visited in pre-order.
+  case D
+  /// A directory that causes a cycle in the tree.
+  case DC
+  /// Any file type not explicitly described by another case.
+  case DEFAULT
+  /// A directory that cannot be read (error; check `errno` field).
+  case DNR
+  /// A `.` or `..` entry not specified as a root path.
+  case DOT
+  /// A directory being visited in post-order.
+  case DP
+  /// An error entry (check `errno` field).
+  case ERR
+  /// A regular file.
+  case F
+  /// A file for which no `stat(2)` information was available (error).
+  case NS
+  /// A file for which no `stat(2)` information was requested.
+  case NSOK
+  /// A symbolic link.
+  case SL
+  /// A symbolic link with a non-existent target.
+  case SLNONE
+  /// A whiteout object.
+  case W
+  /// The raw value did not match any known `FTS_*` constant.
   case INVALID
 
+  /// Converts a raw `FTS_*` integer constant to an ``FTSInfo`` case.
+  ///
+  /// - Parameter x: A raw `FTS_*` value from the Darwin `fts` API.
   public init(_ x : Int) {
     switch Int32(x) {
       case FTS_D: self = Self.D
@@ -78,34 +116,71 @@ public enum FTSInfo : Int {
     }
   }
 }
+
+/// Option flags passed to ``FTSWalker`` / `fts_open`.
+///
+/// Each static member mirrors an `FTS_*` flag from `<fts.h>`.
 public struct FTSFlags: OptionSet, Sendable {
-    public let rawValue: Int32
-    public init(rawValue: Int32) {
-        self.rawValue = rawValue
-    }
+  /// The raw integer bitmask.
+  public let rawValue: Int32
+
+  /// Creates an `FTSFlags` from a raw bitmask.
+  public init(rawValue: Int32) {
+    self.rawValue = rawValue
+  }
+
+  /// No flags set.
   public static let empty = FTSFlags([])
+  /// Follow command-line symbolic links.
   public static let COMFOLLOW = FTSFlags(rawValue: FTS_COMFOLLOW)
+  /// Use logical (symlink-following) traversal.
   public static let LOGICAL = FTSFlags(rawValue: FTS_LOGICAL)
+  /// Do not `chdir(2)` into each directory.
   public static let NOCHDIR = FTSFlags(rawValue: FTS_NOCHDIR)
+  /// Do not call `stat(2)` on each entry.
   public static let NOSTAT = FTSFlags(rawValue: FTS_NOSTAT)
+  /// Use physical (non-symlink-following) traversal.
   public static let PHYSICAL = FTSFlags(rawValue: FTS_PHYSICAL)
+  /// Include `.` and `..` in the traversal.
   public static let SEEDOT = FTSFlags(rawValue: FTS_SEEDOT)
+  /// Do not cross device boundaries.
   public static let XDEV = FTSFlags(rawValue: FTS_XDEV)
+  /// Include whiteout entries.
   public static let WHITEOUT = FTSFlags(rawValue: FTS_WHITEOUT)
+  /// Follow symlinks in the command-line directories only.
   public static let COMFOLLOWDIR = FTSFlags(rawValue: FTS_COMFOLLOWDIR)
+  /// Like `NOSTAT` but also reveals the file type.
   public static let NOSTAT_TYPE = FTSFlags(rawValue: FTS_NOSTAT_TYPE)
+  /// Internal option mask.
   public static let OPTIONMASK = FTSFlags(rawValue: FTS_OPTIONMASK)
+  /// Return only file names, not full path information.
   public static let NAMEONLY = FTSFlags(rawValue: FTS_NAMEONLY)
+  /// Stop traversal immediately.
   public static let STOP = FTSFlags(rawValue: FTS_STOP)
+  /// Use a separate thread for `fchdir`.
   public static let THEAD_FCHDIR = FTSFlags(rawValue: FTS_THREAD_FCHDIR)
 }
 
+/// A `Sequence`/`IteratorProtocol` wrapper around the POSIX `fts(3)` file-tree-walk API.
+///
+/// Each call to ``next()`` returns one ``FTSEntry`` describing a file or directory
+/// encountered during the traversal.  Create an instance with the root paths and
+/// desired options, then iterate using a `for`-`in` loop.
 public class FTSWalker: Sequence, IteratorProtocol {
+  /// The underlying opaque `FTS` handle.
   var fts: UnsafeMutablePointer<FTS>?
   private var finished = false
   private let rootPaths: [String]
   private let cPath: [UnsafeMutablePointer<CChar>?]
 
+  /// Creates an `FTSWalker` that traverses the given root paths.
+  ///
+  /// - Parameters:
+  ///   - path: One or more root paths to traverse.
+  ///   - options: Flags controlling traversal behaviour. Defaults to `[.LOGICAL, .NOCHDIR]`.
+  ///   - sort: An optional closure used to sort directory entries. When `nil`, entries
+  ///     are returned in the order the filesystem provides them.
+  /// - Throws: ``POSIXErrno`` if `fts_open` fails.
   public init(path: [String], options: FTSFlags = [.LOGICAL, .NOCHDIR], sort: (@Sendable (FTSEntry, FTSEntry) -> ComparisonResult)? = nil) throws(POSIXErrno) {
     self.rootPaths = path
     self.cPath = path.compactMap { strdup($0) }
@@ -119,10 +194,12 @@ public class FTSWalker: Sequence, IteratorProtocol {
     }
   }
 
+  /// The device ID of the root of the traversal.
   public var dev : UInt { get {
     return UInt(fts!.pointee.fts_dev)
   }}
 
+  /// Returns the next ``FTSEntry`` in the traversal, or `nil` when complete.
   public func next() -> FTSEntry? {
     guard let fts = self.fts, !finished else { return nil }
 
@@ -145,6 +222,9 @@ public class FTSWalker: Sequence, IteratorProtocol {
     }
   }
 
+  /// Returns the immediate children of the current directory as an array of ``FTSEntry`` values.
+  ///
+  /// Calls `fts_children(3)` with full stat information.
   public var children : [FTSEntry] { get {
     var res = [FTSEntry]()
     var k = fts_children(fts, 0)
@@ -155,6 +235,9 @@ public class FTSWalker: Sequence, IteratorProtocol {
     return res
   } }
 
+  /// Returns the names (only) of the immediate children of the current directory.
+  ///
+  /// Calls `fts_children(3)` with `FTS_NAMEONLY` to avoid stat overhead.
   public var childNames : [String] { get {
     var res = [String]()
     var k = fts_children(fts, FTSFlags.NAMEONLY.rawValue)
@@ -177,15 +260,18 @@ public class FTSWalker: Sequence, IteratorProtocol {
     }
     return res
   } }
-
-
 }
 
+/// An instruction passed to ``FTSEntry/setAction(_:)`` to modify the traversal of the current entry.
 public enum FTSAction {
+  /// Follow the symbolic link (for entries with info `.SL` or `.SLNONE`).
   case FOLLOW
+  /// Skip this directory and its descendants.
   case SKIP
+  /// Visit this entry again (e.g. to re-stat after modification).
   case AGAIN
 
+  /// The raw `FTS_*` integer value passed to `fts_set(3)`.
   var value : Int32 {
     switch self {
       case .FOLLOW: return FTS_FOLLOW
@@ -195,29 +281,56 @@ public enum FTSAction {
   }
 }
 
+/// A Swift value type wrapping a single `FTSENT` record returned by the `fts(3)` API.
 public struct FTSEntry {
+  /// The owning walker (retained to keep the `FTS*` handle alive while this entry is used).
   var fts : FTSWalker?
+  /// Pointer to the underlying `FTSENT` — valid only during the current traversal step.
   var ent : UnsafeMutablePointer<FTSENT>
+
+  /// The path used to access the file (relative to the current working directory).
   public var accpath : String
 
-
+  /// The device number of the filesystem on which the file resides.
   public var dev : Int32
+
+  /// The POSIX `errno` value if this is an error entry.
   public var errno : POSIXErrno
+
+  /// Internal `fts` flags for this entry.
   var flags : Int32
+
+  /// The inode number of the file.
   public var ino : UInt64
+
+  /// The classification of this entry (directory, regular file, symbolic link, etc.).
   public var info : FTSInfo
+
+  /// The instruction set via ``setAction(_:)`` (0 if not modified).
   var instr : Int
+
+  /// The depth of this entry relative to the root (0 = root itself).
   public var level : Int
 
+  /// The file's last component name.
   public var name : String!
+
+  /// The number of hard links to this file.
   public var nlink : Int
+
+  /// A user-defined integer associated with this entry, readable and writable via `fts_number`.
   public var number : Int {
     get { return ent.pointee.fts_number }
     set { ent.pointee.fts_number = newValue }
   }
 
+  /// The full path to the file relative to the traversal root.
   public var path : String
 
+  /// Retrieves the user-defined object pointer stored in this entry as a strongly typed object.
+  ///
+  /// - Parameter c: The expected class type.
+  /// - Returns: The retained object cast to `T`, or `nil` if no pointer is set.
   public func getPointer<T>(_ c : T.Type) -> T? where T : AnyObject {
     if ent.pointee.fts_pointer == nil {
       return nil
@@ -225,6 +338,12 @@ public struct FTSEntry {
       return Unmanaged<T>.fromOpaque(ent.pointee.fts_pointer).takeRetainedValue()
     }
   }
+
+  /// Stores a strongly retained object pointer in this entry.
+  ///
+  /// Pass `nil` to clear the stored pointer.
+  ///
+  /// - Parameter a: The object to retain, or `nil`.
   public func setPointer(_ a : AnyObject?) {
     if let a {
       ent.pointee.fts_pointer = Unmanaged.passRetained(a).toOpaque()
@@ -233,10 +352,14 @@ public struct FTSEntry {
     }
   }
 
+  /// The `stat(2)` metadata for this entry, wrapped as a ``FileMetadata``.
   public var statp : FileMetadata
+
+  /// The file descriptor of the directory containing this entry (if `FTS_NOCHDIR` is not set).
   var symfd : Int
 
   var cycle_ : UnsafeMutablePointer<FTSENT>?
+  /// The entry that caused a directory cycle, if ``info`` is `.DC`.
   public var cycle : FTSEntry? { get {
     if let c = cycle_ {
       return FTSEntry(fts, c)
@@ -244,7 +367,9 @@ public struct FTSEntry {
       return nil
     }
   }}
+
   var parent_ : UnsafeMutablePointer<FTSENT>?
+  /// The parent directory entry.
   public var parent : FTSEntry? { get {
     if let p = parent_ {
       return FTSEntry(fts, p)
@@ -252,7 +377,9 @@ public struct FTSEntry {
       return nil
     }
   }}
+
   var link_ : UnsafeMutablePointer<FTSENT>?
+  /// The next sibling entry in the same directory.
   public var link : FTSEntry? { get {
     if let l = link_ {
       return FTSEntry(fts, l)
@@ -261,13 +388,17 @@ public struct FTSEntry {
     }
   }}
 
+  /// Creates an `FTSEntry` by copying all fields out of the raw `FTSENT` immediately.
+  ///
+  /// - Parameters:
+  ///   - fts: The owning ``FTSWalker`` (may be `nil`).
+  ///   - ff: The raw `FTSENT` pointer.
   init(_ fts : FTSWalker? = nil, _ ff : UnsafeMutablePointer<FTSENT>) {
     self.ent = ff
     self.fts = fts
     let f = ff.pointee
 
     self.accpath = String(cString: f.fts_accpath)
-
     self.dev = f.fts_dev
     self.errno = POSIXErrno(f.fts_errno)
     self.flags = Int32(f.fts_flags)
@@ -276,15 +407,10 @@ public struct FTSEntry {
     self.instr = Int(f.fts_instr)
     self.level = Int(f.fts_level)
     self.nlink = Int(f.fts_nlink)
-
     self.cycle_ = f.fts_cycle
     self.parent_ = f.fts_parent
     self.link_ = f.fts_link
-
-
     self.path = String(cString: f.fts_path)
-
- //   self.pointer = f.fts_pointer
     self.statp = FileMetadata(from: f.fts_statp)
     self.symfd = Int(f.fts_symfd)
 
@@ -292,44 +418,46 @@ public struct FTSEntry {
     // it is a string longer than 1.  passing this struct as an argument will cause the name to get lost.
     // so, before the memory beyond the defined end of the struct is tampered with, grab the fts_name from
     // the struct.
-
-      let jk = UnsafeRawPointer(ff).advanced(by: MemoryLayout.offset(of: \FTSENT.fts_name)!)
-      jk.withMemoryRebound(to: UInt8.self, capacity: Int(f.fts_namelen)) {jj in
-        let buf = UnsafeBufferPointer(start: jj, count: Int(f.fts_namelen))
-        let h = Array(buf)
-        self.name = String(decoding: h, as: UTF8.self)
-      }
-
+    let jk = UnsafeRawPointer(ff).advanced(by: MemoryLayout.offset(of: \FTSENT.fts_name)!)
+    jk.withMemoryRebound(to: UInt8.self, capacity: Int(f.fts_namelen)) {jj in
+      let buf = UnsafeBufferPointer(start: jj, count: Int(f.fts_namelen))
+      let h = Array(buf)
+      self.name = String(decoding: h, as: UTF8.self)
+    }
   }
 
+  /// Instructs the `fts` traversal to perform `action` on this entry during the next call to `fts_read`.
+  ///
+  /// - Parameter action: The action to apply (`.FOLLOW`, `.SKIP`, or `.AGAIN`).
   public mutating func setAction(_ action: FTSAction) {
     if let ff = fts?.fts { fts_set(ff, UnsafeMutablePointer(mutating: self.ent), action.value) }
   }
 }
 
-
-
+/// Lists the immediate children of the directory at `path`.
+///
+/// - Parameter path: The directory to enumerate.
+/// - Returns: An array of `FilePath.Component` values for each entry (excluding `.` and `..`).
+/// - Throws: `Errno` if the directory cannot be opened or read.
 func listDirectory(at path: FilePath) throws -> [FilePath.Component] {
-    var entries: [FilePath.Component] = []
+  var entries: [FilePath.Component] = []
 
-    let dir = opendir(path.string)
-    guard let stream = dir else {
-        throw Errno(rawValue: errno)
+  let dir = opendir(path.string)
+  guard let stream = dir else {
+    throw Errno(rawValue: errno)
+  }
+  defer { closedir(stream) }
+
+  while let entry = readdir(stream) {
+    let name = withUnsafePointer(to: entry.pointee.d_name) {
+      $0.withMemoryRebound(to: CChar.self, capacity: Int(NAME_MAX)) {
+        String(cString: $0)
+      }
     }
-    defer { closedir(stream) }
-
-    while let entry = readdir(stream) {
-        let name = withUnsafePointer(to: entry.pointee.d_name) {
-            $0.withMemoryRebound(to: CChar.self, capacity: Int(NAME_MAX)) {
-                String(cString: $0)
-            }
-        }
-        if name != "." && name != ".." {
-            entries.append(FilePath.Component(name)!)
-        }
+    if name != "." && name != ".." {
+      entries.append(FilePath.Component(name)!)
     }
+  }
 
-    return entries
+  return entries
 }
-
-

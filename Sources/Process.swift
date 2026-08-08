@@ -6,28 +6,31 @@ import Darwin
 
 import os
 
+/// Shared `os.Logger` used by CMigration's process-related helpers.
 let logger = Logger(subsystem: "CMigration", category: "Process")
 
+/// Logs a string message at the `info` level.
+///
+/// - Parameter message: The message to log.
 func log(_ message: String) {
   logger.info("\(message)")
 }
 
+/// Logs a ``POSIXErrno`` error at the `error` level and returns it unchanged.
+///
+/// - Parameter message: The error to log.
+/// - Returns: The same ``POSIXErrno`` value, enabling `throw log(error)` patterns.
 func log(_ message: POSIXErrno) -> POSIXErrno {
   logger.error("\(message.localizedDescription)")
   return message
 }
 
+/// A namespace for reading and writing POSIX environment variables.
 public struct Environment {
-  /// Return the value of the environment variable given as argument.  Return `nil` if the environment variable is not set
-/*  public static func getenv(_ name: String) -> String? {
-    if let a = Darwin.getenv(name) {
-      return String(cString: a)
-    } else {
-      return nil
-    }
-  }
-*/
-  
+  /// Gets or sets an individual environment variable.
+  ///
+  /// Reading returns `nil` when the variable is unset.
+  /// Assigning `nil` calls `unsetenv(3)`.
   public static subscript(_ name : String) -> String? {
     get {if let a = Darwin.getenv(name) {
       return String(cString: a)
@@ -44,7 +47,9 @@ public struct Environment {
     }
   }
 
-  /// Return  a dictionary mapping environment variable names to values
+  /// Returns a dictionary mapping all environment variable names to their values.
+  ///
+  /// - Returns: A `[String: String]` snapshot of the current environment.
   public static func getenv() -> [String:String] {
     var env = [String: String]()
 
@@ -62,8 +67,14 @@ public struct Environment {
     return env
   }
 
-  /// Set the environment variable specified by @arg name to the value specified by @arg value.`
-  /// A subscript `set` specifier cannot throw -- so I need a separate function
+  /// Sets an environment variable, throwing on failure.
+  ///
+  /// Unlike the subscript setter, this method can propagate errors from `setenv(3)`.
+  ///
+  /// - Parameters:
+  ///   - name: The environment variable name.
+  ///   - value: The value to assign.
+  /// - Throws: ``POSIXErrno`` if `setenv` returns `-1`.
   public static func setenv(_ name : String, _ value: String) throws(POSIXErrno) {
     let k = Darwin.setenv(name, value, 1)
     if k == -1 {
@@ -71,23 +82,21 @@ public struct Environment {
     }
   }
 
-  /// Unset the environment variable @arg name
+  /// Unsets an environment variable, throwing on failure.
+  ///
+  /// - Parameter name: The environment variable name to remove.
+  /// - Throws: ``POSIXErrno`` if `unsetenv` returns `-1`.
   public static func unsetenv(_ name : String) throws(POSIXErrno) {
     let k = Darwin.unsetenv(name)
     if k == -1 {
       throw POSIXErrno(fn: "unsetenv")
     }
   }
-
-  /*
-  /// Return the name of the currently executing command
-  public static var progname : String {
-    let k = String(cString: getprogname())
-    return k
-  }
-   */
 }
 
+/// Marker protocol for types that can be supplied as standard input to a child process.
+///
+/// Conforming types: `String`, `Substring`, `[UInt8]`, `FileDescriptor`, `AsyncStream`, `FilePath`.
 public protocol Stdinable : Sendable {}
 extension String : Stdinable {}
 extension Substring : Stdinable {}
@@ -96,38 +105,62 @@ extension FileDescriptor : Stdinable {}
 extension AsyncStream : Stdinable {}
 extension FilePath : Stdinable {}
 
+/// Marker protocol for types that can be used as command-line arguments.
+///
+/// Conforming types implement ``asStringArgument()`` to produce the string representation
+/// passed to `execv(3)`.
 public protocol Arguable : Sendable {
+  /// Returns the string representation of this value for use as a command-line argument.
   func asStringArgument() -> String
 }
 extension Substring : Arguable {
+  /// Returns this substring as a `String`.
   public func asStringArgument() -> String { return String(self) }
 }
 extension String : Arguable {
+  /// Returns `self`.
   public func asStringArgument() -> String { return self }
 }
 extension FilePath : Arguable {
+  /// Returns the path's string representation.
   public func asStringArgument() -> String { return self.string }
 }
 
 
 extension FileDescriptor {
+  /// Sets the close-on-exec flag (`FD_CLOEXEC`) on this file descriptor.
   func setCloexec() {
     let flags = Darwin.fcntl(self.rawValue, F_GETFD)
     _ = fcntl(self.rawValue, F_SETFD, flags | FD_CLOEXEC)
   }
 }
 
+/// An actor that wraps `posix_spawn(2)` to launch and manage a child process.
+///
+/// `DarwinProcess` captures stdout and stderr via pipes, optionally feeds data to
+/// stdin, and exposes the combined output as an ``Output`` value.
+///
+/// Typical usage:
+/// ```swift
+/// let result = try await DarwinProcess().run("/usr/bin/sw_vers", args: "-productVersion")
+/// print(result.string)
+/// ```
 public actor DarwinProcess {
 
+  /// The captured output of a completed child process.
   public struct Output : Sendable {
+    /// The process exit code.
     public let code : Int32
+    /// The raw bytes written to standard output.
     public let data : [UInt8]
+    /// The text written to standard error.
     public let error : String
 
+    /// The standard output decoded as a UTF-8 string.
     public var string : String { String(decoding: data, as: UTF8.self) }
   }
 
-
+  /// The PID of the spawned child process (0 before launch).
   public var pid : pid_t = 0
   var stdinWriteFDForParent: FileDescriptor? = nil
 
@@ -144,34 +177,39 @@ public actor DarwinProcess {
 
   var pendingOutput : [UInt8] = []
 
+  /// Creates an unstarted `DarwinProcess`.
   public init() {}
 
-  /*
-   // An alternative to using Stdinable; make an enum of possible ways to pass stdin
-   public enum StandardInput: Sendable {
-   case inherit
-   case string(String)
-   case bytes([UInt8])
-   case fileDescriptor(FileDescriptor)
-   case filePath(FilePath)
-   case byteStream(AsyncStream<[UInt8]>)
-   }
-   */
-
+  /// Sends `signal` to the child process.
+  ///
+  /// - Parameter n: The signal number. Defaults to `SIGTERM`.
   public func kill(_ n : Int32 = SIGTERM) {
     Darwin.kill(pid, SIGTERM)
   }
 
+  /// Returns accumulated stdout bytes and clears the internal buffer.
   public func getOutput() -> [UInt8] {
     let k = pendingOutput
     pendingOutput = []
     return k
   }
 
+  /// Appends bytes to the internal stdout buffer (called from the reader task).
   func appendOutput(_ b : [UInt8]) {
     pendingOutput.append(contentsOf: b)
   }
 
+  /// Convenience static factory: creates a `DarwinProcess`, launches it, and returns it.
+  ///
+  /// - Parameters:
+  ///   - executablePath: The executable to run.
+  ///   - withStdin: Optional standard input (see ``Stdinable``).
+  ///   - arguments: Command-line arguments (variadic).
+  ///   - env: Extra environment variables merged over the parent's environment.
+  ///   - cd: Optional working directory for the child.
+  ///   - captureOutput: When `true` (default), stdout is captured.
+  /// - Returns: A running `DarwinProcess`.
+  /// - Throws: ``POSIXErrno`` if spawning fails.
   public static func launch(
     _ executablePath: String,
     withStdin: (any Stdinable)? = nil,
@@ -185,6 +223,17 @@ public actor DarwinProcess {
     return p
   }
 
+  /// Launches the process with variadic arguments (instance method).
+  ///
+  /// - Parameters:
+  ///   - executablePath: The executable to run.
+  ///   - withStdin: Optional standard input.
+  ///   - arguments: Command-line arguments (variadic).
+  ///   - env: Extra environment variables merged over the parent's environment.
+  ///   - cd: Optional working directory.
+  ///   - captureOutput: Whether to capture stdout.
+  /// - Returns: The child PID.
+  /// - Throws: ``POSIXErrno`` if spawning fails.
   public func launch(
     _ executablePath: String,
     withStdin: (any Stdinable)? = nil,
@@ -196,8 +245,18 @@ public actor DarwinProcess {
     return try launch(executablePath, withStdin: withStdin, args: arguments, env: env, cd: cd, captureOutput: captureOutput)
   }
 
+  /// Core launch implementation: sets up pipes, configures `posix_spawn` file actions,
+  /// spawns the child, and kicks off background I/O tasks.
+  ///
   /// - Parameters:
-  ///   - stdin: If non-nil, bytes are written to the child process stdin and then stdin is closed.
+  ///   - execu: The executable name or path (resolved via `PATH` if not absolute).
+  ///   - withStdin: If non-nil, bytes are written to the child's stdin and then stdin is closed.
+  ///   - arguments: Command-line arguments.
+  ///   - env: Extra environment variables merged over the parent's environment.
+  ///   - cd: Optional working directory (macOS only, via `posix_spawn_file_actions_addchdir_np`).
+  ///   - captureOutput: When `true`, stdout is captured into ``pendingOutput``.
+  /// - Returns: The child PID.
+  /// - Throws: ``POSIXErrno`` if any system call fails.
   public func launch(
     _ execu: String,
     withStdin: (any Stdinable)? = nil,
@@ -213,9 +272,6 @@ public actor DarwinProcess {
     guard let executablePath = searchPath(for: execu) else {
       throw POSIXErrno(2, fn: "launching process")
     }
-
-    // FIXME: as a life-cycle matter, only one "launch" per instance is allowed.
-    // also, only "value" per instance is allowed (and it must folow "launch"
 
     var stdoutW : FileDescriptor? = nil
     var stderrW : FileDescriptor
@@ -249,9 +305,6 @@ public actor DarwinProcess {
     stderrW.setCloexec()
     stdoutR?.setCloexec()
     stdoutW?.setCloexec()
-
-
-
 
 
     // posix_spawn file actions are optional-opaque on Darwin in Swift
@@ -359,8 +412,6 @@ public actor DarwinProcess {
     let envpStrings: [String]? = nv.map { "\($0.key)=\($0.value)" }
 
 
-
-    // 1️⃣ Initialize
     guard posix_spawnattr_init(&attr) == 0 else {
       throw log(POSIXErrno(fn: "posix_spawnattr_init"))
     }
@@ -384,8 +435,6 @@ public actor DarwinProcess {
     sigemptyset(&sig)
     posix_spawnattr_setsigdefault(&attr, &sig)
     posix_spawnattr_setsigmask(&attr, &sig)
-
-
 
 
     do {
@@ -426,7 +475,7 @@ public actor DarwinProcess {
       throw p
     }
 
-    // Parent closes any stdin file FD it opened (child has its own dup2’d copy).
+    // Parent closes any stdin file FD it opened (child has its own dup2'd copy).
     if let fd = openedStdinFDToCloseInParent { try? fd.close() }
 
 
@@ -481,14 +530,19 @@ public actor DarwinProcess {
     }
 
     return pid
-
-    // Concurrently:
-    // - drain stdout/stderr
-    // - wait for exit
-    // - (optionally) write stdin then close it to deliver EOF
-
   }
 
+  /// Convenience: launches the process with variadic arguments and immediately awaits the result.
+  ///
+  /// - Parameters:
+  ///   - executablePath: The executable to run.
+  ///   - withStdin: Optional standard input.
+  ///   - arguments: Command-line arguments (variadic).
+  ///   - env: Extra environment variables.
+  ///   - cd: Optional working directory.
+  ///   - captureOutput: Whether to capture stdout.
+  /// - Returns: The ``Output`` produced by the child process.
+  /// - Throws: Any error from ``launch(_:withStdin:args:env:cd:captureOutput:)-4r7v4`` or ``value()``.
   public func run(
     _ executablePath: String,
     withStdin: (any Stdinable)? = nil,
@@ -500,6 +554,17 @@ public actor DarwinProcess {
     return try await run(executablePath, withStdin: withStdin, args: arguments, env: env, cd: cd, captureOutput: captureOutput)
   }
 
+  /// Launches the process with an array of arguments and immediately awaits the result.
+  ///
+  /// - Parameters:
+  ///   - executablePath: The executable to run.
+  ///   - withStdin: Optional standard input.
+  ///   - arguments: Command-line arguments.
+  ///   - env: Extra environment variables.
+  ///   - cd: Optional working directory.
+  ///   - captureOutput: Whether to capture stdout.
+  /// - Returns: The ``Output`` produced by the child process.
+  /// - Throws: Any error from ``launch(_:withStdin:args:env:cd:captureOutput:)-4r7v4`` or ``value()``.
   public func run(
     _ executablePath: String,
     withStdin: (any Stdinable)? = nil,
@@ -521,8 +586,12 @@ public actor DarwinProcess {
     return try await value()
   }
 
-
-
+  /// Waits for all I/O tasks to complete and collects the process exit code and captured output.
+  ///
+  /// May only be called once per `DarwinProcess` instance.
+  ///
+  /// - Returns: An ``Output`` with the exit code, stdout bytes, and stderr string.
+  /// - Throws: Any error from the reader, feeder, or error tasks, or from `waitpid(2)`.
   public func value() async throws -> Output {
     defer { posix_spawn_file_actions_destroy(&actions); actions = nil }
 
@@ -538,9 +607,6 @@ public actor DarwinProcess {
     let stdout = pendingOutput
 
 
-    //      let (stdout, stderr, terminationStatus, _) = try await (readerTask == nil ? [UInt8]() : readerTask!.value, errorTask!.value, status, feederTask!.value)
-
-
     let res = try await Output(code: status, data: stdout, error: stderr)
 
     // Close read ends after drain
@@ -552,7 +618,13 @@ public actor DarwinProcess {
 
   // MARK: - Helpers
 
-
+  /// Waits for the process with `pid` to exit and returns its normalised exit code.
+  ///
+  /// Signal-terminated processes return `128 + signo`.
+  ///
+  /// - Parameter pid: The child PID to wait for.
+  /// - Returns: The exit code.
+  /// - Throws: ``POSIXErrno`` if `waitpid(2)` fails.
   private func waitForExit(pid: pid_t) async throws -> Int32 {
     try await Task.detached {
       var status: Int32 = 0
@@ -574,6 +646,14 @@ public actor DarwinProcess {
 
   // MARK: - posix_spawn file actions wiring (Darwin Swift overlay)
 
+  /// Adds a `dup2` action to `actions`, and optionally adds a `close` of the source fd in the child.
+  ///
+  /// - Parameters:
+  ///   - actions: The `posix_spawn_file_actions_t` to modify.
+  ///   - from: The source file descriptor number.
+  ///   - to: The destination file descriptor number (e.g. `STDIN_FILENO`).
+  ///   - closeSourceInChild: When `true`, also adds a `posix_spawn_file_actions_addclose` for `from`.
+  /// - Throws: ``POSIXErrno`` if either system call fails.
   private func addDup2AndClose(
     _ actions: inout posix_spawn_file_actions_t?,
     from: Int32,
@@ -589,7 +669,15 @@ public actor DarwinProcess {
     }
   }
 
-
+  /// Converts an array of Swift strings to a null-terminated C string array and passes it to `body`.
+  ///
+  /// Each string is `strdup`-ed; the duplicates are freed before this function returns.
+  ///
+  /// - Parameters:
+  ///   - strings: The strings to convert.
+  ///   - body: A closure that receives the null-terminated `[UnsafeMutablePointer<CChar>?]`.
+  /// - Returns: The value returned by `body`.
+  /// - Throws: Any error thrown by `body`.
   private func withCStringArray<R>(
     _ strings: [String],
     _ body: ([UnsafeMutablePointer<CChar>?]) throws -> R
@@ -611,9 +699,16 @@ public actor DarwinProcess {
 }
 
 // ===================================================================================================
-/**
- Implemented for find.
-  */
+
+/// Replaces the current process image with `x`, passing `a` as `argv`.
+///
+/// If `execvp(3)` returns, something went wrong; the function returns the `errno`
+/// value rather than terminating.
+///
+/// - Parameters:
+///   - x: The executable path or name.
+///   - a: The full argument array (including `argv[0]`).
+/// - Returns: A ``POSIXErrno`` describing the failure reason.
 public func execvp(_ x : String, _ a : [String]) -> POSIXErrno {
   let az = a.map { $0.withCString { strdup($0) } } + [UnsafeMutablePointer<CChar>.init(bitPattern: 0)]
   Darwin.execvp(x, az )
@@ -621,6 +716,13 @@ public func execvp(_ x : String, _ a : [String]) -> POSIXErrno {
 }
 
 public extension FileDescriptor {
+  /// Reads whatever bytes are currently available on the file descriptor without blocking.
+  ///
+  /// Returns an empty array if no bytes are available (`EAGAIN`/`EWOULDBLOCK`), or at
+  /// end-of-file.
+  ///
+  /// - Returns: All bytes currently available.
+  /// - Throws: `Errno` for any error other than `EAGAIN`/`EWOULDBLOCK`.
   func readAvailableBytes() throws(Errno) -> [UInt8] {
     var result: [UInt8] = []
     var buffer = [UInt8](repeating: 0, count: 4096)
@@ -648,6 +750,11 @@ public extension FileDescriptor {
     return result
   }
 
+  /// Blocks the current thread until at least one byte is available to read on this descriptor.
+  ///
+  /// Uses `poll(2)` with an infinite timeout and retries on `EINTR`.
+  ///
+  /// - Throws: `Errno` if `poll` returns an error.
   func waitUntilReadable() throws(Errno) {
     var pfd = pollfd(
       fd: Int32(self.rawValue),
@@ -670,6 +777,9 @@ public extension FileDescriptor {
     }
   }
 
+  /// Sets the `O_NONBLOCK` flag on this file descriptor.
+  ///
+  /// - Throws: `Errno` if `fcntl(F_SETFL)` fails.
   func makeNonBlocking() throws(Errno) {
     let flags = fcntl(self.rawValue, F_GETFL)
     guard flags >= 0 else { throw Errno(rawValue: errno) }

@@ -4,37 +4,97 @@
 import System
 import Darwin
 
-
-/// Running a sub process (using `ProcessRunner` will return the contents of standard output and standard error wrapped in this struct
+/// The captured standard output and standard error of a completed subprocess.
 public struct ProcessResult : Sendable {
-    public let stdout: String
-    public let stderr: String
+  /// The text written to standard output by the subprocess.
+  public let stdout: String
+  /// The text written to standard error by the subprocess.
+  public let stderr: String
 }
 
-/// Running a subprocess (using `ProcessRunner` will throw a ProcessError if
-/// a) the subprocess fails to run (`spawnFailed`) or
-/// b) the subprocess runs and terminates with a non-zero exit status (`nonZeroExit`)
+/// Errors thrown by ``ProcessRunner`` when a subprocess fails.
 public enum ProcessError: Error, CustomStringConvertible {
-    case nonZeroExit(code: Int32, stdout: String, stderr: String)
-    case spawnFailed(errno: Int32)
+  /// The subprocess exited with a non-zero status code.
+  ///
+  /// - Parameters:
+  ///   - code: The exit status.
+  ///   - stdout: The captured standard output.
+  ///   - stderr: The captured standard error.
+  case nonZeroExit(code: Int32, stdout: String, stderr: String)
 
-    public var description: String {
-        switch self {
-        case .nonZeroExit(let code, let out, let err):
-            return "Process failed with exit code \(code).\nstdout:\n\(out)\nstderr:\n\(err)"
-        case .spawnFailed(let errno):
-            return "posix_spawn failed with errno \(errno): \(String(cString: strerror(errno)))"
-        }
+  /// `posix_spawn` itself failed before the child could be started.
+  ///
+  /// - Parameter errno: The `errno` value set by `posix_spawn`.
+  case spawnFailed(errno: Int32)
+
+  /// A human-readable description of the error.
+  public var description: String {
+    switch self {
+    case .nonZeroExit(let code, let out, let err):
+      return "Process failed with exit code \(code).\nstdout:\n\(out)\nstderr:\n\(err)"
+    case .spawnFailed(let errno):
+      return "posix_spawn failed with errno \(errno): \(String(cString: strerror(errno)))"
     }
+  }
 }
-/*
+
+/// Spawns a subprocess and optionally captures its standard output and standard error.
+///
+/// Construct a `ProcessRunner` with the command path and arguments, then call
+/// ``run(input:prelaunch:captureStdout:captureStderr:)`` to execute it.  The
+/// returned ``ProcessResult`` contains the captured output.
+///
+/// > Note: The older synchronous `ProcessRunner.run(command:…)` static method has been
+/// > commented out and replaced with this instance-based async API.
 public struct ProcessRunner {
-  public static func run(command: String, arguments: [String],
-                         currentDirectory : String? = nil,
-                         environment: [String: String]? = nil,
-                         prelaunch: (@Sendable (pid_t) async -> ())? = nil,
-                         captureStdout: Bool = true,
-                         captureStderr: Bool = true) throws -> ProcessResult {
+  /// The path (or name) of the executable to spawn.
+  var command : String
+  /// Command-line arguments passed to the executable.
+  var arguments: [String]
+  /// An optional environment dictionary; if `nil`, the parent environment is inherited.
+  var environment : [String : String]?
+  /// An optional working directory; if `nil`, the child inherits the parent's directory.
+  var currentDirectory : String?
+
+  /// Creates a `ProcessRunner` configured with the given parameters.
+  ///
+  /// - Parameters:
+  ///   - command: The executable path or name (resolved via `PATH` if not absolute).
+  ///   - arguments: Arguments passed to the executable.
+  ///   - currentDirectory: Optional working directory for the child process.
+  ///   - environment: Optional environment dictionary; `nil` inherits the parent's environment.
+  public init(command: String, arguments: [String], currentDirectory: String? = nil, environment: [String: String]? = nil) {
+    self.command = command
+    self.arguments = arguments
+    self.environment = environment
+    self.currentDirectory = currentDirectory
+  }
+
+  /// Spawns the process and asynchronously waits for it to exit.
+  ///
+  /// - Parameters:
+  ///   - input: Optional data to feed to the child's standard input; may be a `String`,
+  ///     `[UInt8]`, `AsyncStream<UInt8>`, or `FileDescriptor`.  Pass `nil` to inherit
+  ///     the parent's standard input.
+  ///   - prelaunch: An optional async closure called with the child's PID immediately
+  ///     after `posix_spawn` succeeds (useful for attaching a debugger, etc.).
+  ///   - captureStdout: If `true` (the default), standard output is captured and
+  ///     returned in ``ProcessResult/stdout``.
+  ///   - captureStderr: If `true` (the default), standard error is captured and
+  ///     returned in ``ProcessResult/stderr``.
+  /// - Returns: A ``ProcessResult`` containing the captured output.
+  /// - Throws: ``ProcessError/spawnFailed(errno:)`` if `posix_spawn` fails, or
+  ///   ``ProcessError/nonZeroExit(code:stdout:stderr:)`` if the child exits non-zero.
+  public func run(
+    input: (any Stdinable)? = nil,
+    prelaunch: (@Sendable (pid_t) async -> ())? = nil,
+    captureStdout: Bool = true,
+    captureStderr: Bool = true) async throws -> ProcessResult {
+
+    var stdinPipe : (readEnd: FileDescriptor, writeEnd: FileDescriptor)? = nil
+    if input == nil {
+      stdinPipe = try FileDescriptor.pipe()
+    }
 
     var stdoutPipe : (readEnd: FileDescriptor, writeEnd: FileDescriptor)? = nil
 
@@ -48,22 +108,31 @@ public struct ProcessRunner {
       stderrPipe = try FileDescriptor.pipe()
     }
 
-        defer {
-            try? stdoutPipe?.readEnd.close()
-            try? stdoutPipe?.writeEnd.close()
-            try? stderrPipe?.readEnd.close()
-            try? stderrPipe?.writeEnd.close()
-        }
+    defer {
+      try? stdoutPipe?.readEnd.close()
+      try? stdoutPipe?.writeEnd.close()
+      try? stderrPipe?.readEnd.close()
+      try? stderrPipe?.writeEnd.close()
+    }
 
-        var fileActions: posix_spawn_file_actions_t?
-        posix_spawn_file_actions_init(&fileActions)
+    var fileActions: posix_spawn_file_actions_t?
+    posix_spawn_file_actions_init(&fileActions)
 
-      if let cwd = currentDirectory {
-        // FIXME: not available on iOS
-          posix_spawn_file_actions_addchdir_np(&fileActions, cwd)
-      }
-      
-        // Redirect stdout and stderr
+    if let cwd = currentDirectory {
+      #if os(macOS)
+      posix_spawn_file_actions_addchdir_np(&fileActions, cwd)
+      #endif
+    }
+
+    switch input {
+      case nil:
+        posix_spawn_file_actions_adddup2(&fileActions,  FileDescriptor.standardInput.rawValue, STDIN_FILENO)
+      case is FileDescriptor:
+posix_spawn_file_actions_adddup2(&fileActions, (input as! FileDescriptor).rawValue, STDIN_FILENO)
+      default:
+        posix_spawn_file_actions_adddup2(&fileActions, stdinPipe!.readEnd.rawValue, STDIN_FILENO)
+    }
+
     if captureStdout {
       posix_spawn_file_actions_adddup2(&fileActions, stdoutPipe!.writeEnd.rawValue, STDOUT_FILENO)
       posix_spawn_file_actions_addclose(&fileActions, stdoutPipe!.readEnd.rawValue)
@@ -74,14 +143,13 @@ public struct ProcessRunner {
       posix_spawn_file_actions_addclose(&fileActions, stderrPipe!.readEnd.rawValue)
     }
 
-        let argv: [UnsafeMutablePointer<CChar>?] = ([command] + arguments).map { strdup($0) } + [nil]
+    let argv: [UnsafeMutablePointer<CChar>?] = ([command]+arguments).map { strdup($0) } + [nil]
 
-        var pid: pid_t = 0
-    
+    var pid: pid_t = 0
+
     var ev = environ
     if let environment {
       ev = UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>.allocate(capacity: environment.count + 1)
-      defer { ev.deallocate() }
       var i = 0
       for (k, v) in environment {
         ev[i] = strdup("\(k)=\(v)")
@@ -89,28 +157,52 @@ public struct ProcessRunner {
       }
       ev[i] = nil
     }
-        let spawnResult = posix_spawn(&pid, command, &fileActions, nil, argv, ev)
 
-        for ptr in argv where ptr != nil {
-            free(ptr)
-        }
-    
-        posix_spawn_file_actions_destroy(&fileActions)
+    let cc = searchPath(for: command)
 
-        guard spawnResult == 0 else {
-            throw ProcessError.spawnFailed(errno: spawnResult)
-        }
-    
+    let spawnResult = posix_spawn(&pid, cc, &fileActions, nil, argv, ev)
+
+    for ptr in argv where ptr != nil {
+      free(ptr)
+    }
+
+    posix_spawn_file_actions_destroy(&fileActions)
+
+    guard spawnResult == 0 else {
+      throw ProcessError.spawnFailed(errno: spawnResult)
+    }
+
     if let prelaunch { let p = pid; Task { await prelaunch(p) } }
 
-    
-
-        // Close child ends in parent
     var stdo : String = ""
     var stde : String = ""
 
+    if let ii = input {
+      Task.detached {
+        switch ii {
+          case is [UInt8]:
+            let w = stdinPipe!.writeEnd
+            try w.writeAll(ii as! [UInt8])
+          case is String:
+            var j = ii as! String
+            let w = stdinPipe!.writeEnd
+            let n = try j.withUTF8 { bp in
+              try w.writeAll(UnsafeRawBufferPointer(bp) )
+            }
+          case is AsyncStream<UInt8>:
+            var j = ii as! AsyncStream<UInt8>
+            let w = stdinPipe!.writeEnd
+            for try await i in j {
+              try w.write([i])
+            }
+          case is FileDescriptor:
+            break
+          default:
+            fatalError("Unsupported input type \(type(of: ii))")
+        }
+      }
+    }
     if captureStdout {
-      // Capture stdout
       try stdoutPipe!.writeEnd.close()
       stdo = try readAll(from: stdoutPipe!.readEnd)
     }
@@ -119,227 +211,17 @@ public struct ProcessRunner {
       stde = try readAll(from: stderrPipe!.readEnd)
     }
 
+    let status = try await waitpidAsync(pid)
+    let exitCode = WIFEXITED(status) ? WEXITSTATUS(status) : -1
 
-
-
-        // Wait for child
-        var status: Int32 = 0
-        waitpid(pid, &status, 0)
-        let exitCode = WIFEXITED(status) ? WEXITSTATUS(status) : -1
-
-        if exitCode != 0 {
-            throw ProcessError.nonZeroExit(code: exitCode, stdout: stdo, stderr: stde)
-        }
-
-        return ProcessResult(stdout: stdo, stderr: stde)
+    if exitCode != 0 {
+      throw ProcessError.nonZeroExit(code: exitCode, stdout: stdo, stderr: stde)
     }
 
-    private static func readAll(from fd: FileDescriptor) throws -> String {
-        var output = ""
-        var buffer = [UInt8](repeating: 0, count: 4096)
-
-        while true {
-            let bytesRead = try buffer.withUnsafeMutableBytes {
-                try fd.read(into: $0)
-            }
-            if bytesRead == 0 { break }
-                output += String(decoding: buffer[..<bytesRead], as: UTF8.self)
-        }
-
-        return output
-    }
-}
-
- */
-
-/**
- example usage:
- 
- do {
-     let result = try ProcessRunner.run(command: "/bin/ls", arguments: ["-l", "/no/such/dir"], forwardStdoutToParent: true)
-     // When forwarding is enabled, the corresponding field in ProcessResult will be an empty string.
-     print(result.stdout)
- } catch {
-     print("Error: \(error)")
- }
- */
-
-
-/// This struct is used to spawn a subprocess and run it.
-public struct ProcessRunner {
-  var command : String
-  var arguments: [String]
-  var environment : [String : String]?
-  var currentDirectory : String?
-
-  public init(command: String, arguments: [String], currentDirectory: String? = nil, environment: [String: String]? = nil) {
-    self.command = command
-    self.arguments = arguments
-    self.environment = environment
-    self.currentDirectory = currentDirectory
+    return ProcessResult(stdout: stdo, stderr: stde)
   }
 
-  public func run(
-    input: (any Stdinable)? = nil,
-    prelaunch: (@Sendable (pid_t) async -> ())? = nil,
-    captureStdout: Bool = true,
-    captureStderr: Bool = true) async throws -> ProcessResult {
-
-      var stdinPipe : (readEnd: FileDescriptor, writeEnd: FileDescriptor)? = nil
-      if input == nil {
-        stdinPipe = try FileDescriptor.pipe()
-      }
-
-      var stdoutPipe : (readEnd: FileDescriptor, writeEnd: FileDescriptor)? = nil
-
-      if captureStdout {
-        stdoutPipe = try FileDescriptor.pipe()
-      }
-
-      var stderrPipe : (readEnd: FileDescriptor, writeEnd: FileDescriptor)? = nil
-
-      if captureStderr {
-        stderrPipe = try FileDescriptor.pipe()
-      }
-
-      defer {
-        try? stdoutPipe?.readEnd.close()
-        try? stdoutPipe?.writeEnd.close()
-        try? stderrPipe?.readEnd.close()
-        try? stderrPipe?.writeEnd.close()
-      }
-
-      var fileActions: posix_spawn_file_actions_t?
-      posix_spawn_file_actions_init(&fileActions)
-
-      if let cwd = currentDirectory {
-        // FIXME: not available on iOS
-        #if os(macOS)
-        posix_spawn_file_actions_addchdir_np(&fileActions, cwd)
-        #endif
-      }
-
-      // I either want to have stdin be passed through
-      // or stdin is set to the file descriptor for an input file
-      // or stdin is set to the file descriptor for the stdin pipe which will be fed from a String, [UInt8] or AsyncStream<UInt8>
-      switch input {
-        case nil:
-          posix_spawn_file_actions_adddup2(&fileActions,  FileDescriptor.standardInput.rawValue, STDIN_FILENO)
-        case is FileDescriptor:
-posix_spawn_file_actions_adddup2(&fileActions, (input as! FileDescriptor).rawValue, STDIN_FILENO)
-        default:
-          posix_spawn_file_actions_adddup2(&fileActions, stdinPipe!.readEnd.rawValue, STDIN_FILENO)
-
-      }
-
-
-      // Redirect stdout and stderr
-      if captureStdout {
-        posix_spawn_file_actions_adddup2(&fileActions, stdoutPipe!.writeEnd.rawValue, STDOUT_FILENO)
-        posix_spawn_file_actions_addclose(&fileActions, stdoutPipe!.readEnd.rawValue)
-      }
-
-      if captureStderr {
-        posix_spawn_file_actions_adddup2(&fileActions, stderrPipe!.writeEnd.rawValue, STDERR_FILENO)
-        posix_spawn_file_actions_addclose(&fileActions, stderrPipe!.readEnd.rawValue)
-      }
-
-      let argv: [UnsafeMutablePointer<CChar>?] = ([command]+arguments).map { strdup($0) } + [nil]
-
-      var pid: pid_t = 0
-
-      var ev = environ
-      if let environment {
-        ev = UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>.allocate(capacity: environment.count + 1)
- //       defer {
- /*         var i = 0
-          while let j = ev[i] {
-            free(j)
-          }
-  */
-//          ev.deallocate()
-//       }
-        var i = 0
-        for (k, v) in environment {
-          ev[i] = strdup("\(k)=\(v)")
-          i += 1
-        }
-        ev[i] = nil
-      }
-
-      let cc = searchPath(for: command)
-
-      let spawnResult = posix_spawn(&pid, cc, &fileActions, nil, argv, ev)
-
-      for ptr in argv where ptr != nil {
-        free(ptr)
-      }
-
-      posix_spawn_file_actions_destroy(&fileActions)
-
-      guard spawnResult == 0 else {
-        throw ProcessError.spawnFailed(errno: spawnResult)
-      }
-
-      if let prelaunch { let p = pid; Task { await prelaunch(p) } }
-
-
-
-      // Close child ends in parent
-      var stdo : String = ""
-      var stde : String = ""
-
-      if let ii = input {
-        Task.detached {
-          switch ii {
-            case is [UInt8]:
-              let w = stdinPipe!.writeEnd
-              try w.writeAll(ii as! [UInt8])
-            case is String:
-              var j = ii as! String
-              let w = stdinPipe!.writeEnd
-              let n = try j.withUTF8 { bp in
-                try w.writeAll(UnsafeRawBufferPointer(bp) )
-              }
-            case is AsyncStream<UInt8>:
-              var j = ii as! AsyncStream<UInt8>
-              let w = stdinPipe!.writeEnd
-              for try await i in j {
-                try w.write([i])
-              }
-            case is FileDescriptor:
-              break
-/*              var j = ii as! FileDescriptor
-              for try await i in j.bytes {
-                try w.write([i])
-              }
- */
-            default:
-              fatalError("Unsupported input type \(type(of: ii))")
-          }
-        }
-      }
-      if captureStdout {
-        // Capture stdout
-        try stdoutPipe!.writeEnd.close()
-        stdo = try readAll(from: stdoutPipe!.readEnd)
-      }
-      if captureStderr {
-        try stderrPipe!.writeEnd.close()
-        stde = try readAll(from: stderrPipe!.readEnd)
-      }
-
-      // Wait for child
-      let status = try await waitpidAsync(pid)
-      let exitCode = WIFEXITED(status) ? WEXITSTATUS(status) : -1
-
-      if exitCode != 0 {
-        throw ProcessError.nonZeroExit(code: exitCode, stdout: stdo, stderr: stde)
-      }
-
-      return ProcessResult(stdout: stdo, stderr: stde)
-    }
-
+  /// Reads all available bytes from `fd` into a UTF-8 string.
   private func readAll(from fd: FileDescriptor) throws -> String {
     var output = ""
     var buffer = [UInt8](repeating: 0, count: 4096)
@@ -355,14 +237,15 @@ posix_spawn_file_actions_adddup2(&fileActions, (input as! FileDescriptor).rawVal
     return output
   }
 
-
-
-
-  /// Asynchronously wait for a process with the given PID to exit.
+  /// Asynchronously waits for the process with the given PID to exit.
+  ///
+  /// Wraps `waitpid(2)` in a `CheckedThrowingContinuation` so it can be awaited.
+  ///
   /// - Parameters:
   ///   - pid: The process ID to wait for.
-  ///   - options: POSIX wait options (e.g., WNOHANG, WUNTRACED).
-  /// - Returns: The exit status of the child process.
+  ///   - options: POSIX wait options (e.g. `WNOHANG`, `WUNTRACED`). Defaults to 0.
+  /// - Returns: The raw wait status from `waitpid`.
+  /// - Throws: ``POSIXErrno`` if `waitpid` returns an error.
   private func waitpidAsync(_ pid: pid_t, options: CInt = 0) async throws -> CInt {
     return try await withCheckedThrowingContinuation { continuation in
       var status: CInt = 0
@@ -376,16 +259,3 @@ posix_spawn_file_actions_adddup2(&fileActions, (input as! FileDescriptor).rawVal
     }
   }
 }
-
-/**
- example usage:
-
- do {
-     let result = try ProcessRunner2(command: "/bin/ls", arguments: ["-l", "/no/such/dir"]).run(input: "input")
- // When forwarding is enabled, the corresponding field in ProcessResult will be an empty string.
-     print(result.stdout)
- } catch {
-     print("Error: \(error)")
- }
-*/
-

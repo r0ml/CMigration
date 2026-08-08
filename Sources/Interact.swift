@@ -3,17 +3,24 @@
 
 import Darwin
 
+/// The result of matching a user's response against locale-defined yes/no patterns.
 public enum YesNo {
+  /// The response matches the locale's "yes" pattern.
   case yes
+  /// The response matches the locale's "no" pattern.
   case no
+  /// The response does not match either pattern.
   case neither
 }
-/**
-    given the user's response to a yes/no prompt,
-    return YesNo.yes if the response is "yes"
-    or YesNo.no if the response is "no"
-     or YesNo.neither for anything else
- */
+
+/// Matches a user response string against the locale's yes/no regular expressions.
+///
+/// Uses `nl_langinfo(YESEXPR)` and `nl_langinfo(NOEXPR)` to obtain locale-appropriate
+/// patterns, falling back to `^[yY]` and `^[nN]` respectively.
+///
+/// - Parameter resp: The user-supplied response string to test.
+/// - Returns: `.yes` if the response matches the yes pattern, `.no` if it matches
+///   the no pattern, or `.neither` for any other input.
 public func rpmatch(_ resp : String) -> YesNo {
   let rpy = String(validatingCString: nl_langinfo(YESEXPR)) ?? "^[yY]"
   let py = try? Regex(rpy)

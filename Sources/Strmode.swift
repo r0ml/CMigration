@@ -4,7 +4,7 @@
 
 /*-
  * Copyright (c) 1990, 1993
- *  The Regents of the University of California.  All rights reserved.
+ *	The Regents of the University of California.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,6 +33,17 @@
 
 // From LibC
 
+/// Converts a file type and permission set into the 10-character symbolic mode string
+/// used by `ls -l` (e.g. `"-rwxr-xr-x "`).
+///
+/// The returned string is always exactly 11 characters long: a file-type character,
+/// 9 permission characters (owner/group/other read/write/execute with setuid/setgid/sticky
+/// encoding), and a trailing space.
+///
+/// - Parameters:
+///   - mode: The ``FileType`` of the file.
+///   - perm: The ``FilePermissions`` bitmask for the file.
+/// - Returns: A symbolic mode string such as `"-rwxr-xr-x "`.
 public func strmode(_ mode : FileType, _ perm : FilePermissions) -> String {
    /* print type */
   var result = ""
@@ -100,4 +111,3 @@ public func strmode(_ mode : FileType, _ perm : FilePermissions) -> String {
   result.append(" ")
   return result
 }
-

@@ -84,52 +84,83 @@
 
 import Darwin
 
+/// Specifies whether a long option requires, forbids, or optionally accepts an argument.
 public enum argType: Int32, Sendable {
+  /// The option takes no argument.
   case no_argument = 0
+  /// The option requires an argument.
   case required_argument = 1
+  /// The option accepts an optional argument.
   case optional_argument = 2
 }
 
+/// A single entry in a long-option table, describing the option's name and argument requirement.
 public struct LongOption : Sendable {
+  /// The long option name (without leading `--`).
   public let name: String
+  /// Whether the option takes no, required, or optional argument.
   public let has_arg: argType
 
+  /// Creates a `LongOption` with the given name and argument type.
+  ///
+  /// - Parameters:
+  ///   - n: The long option name.
+  ///   - h: Whether the option takes an argument.
   public init(_ n: String, _ h: argType) {
     self.name = n
     self.has_arg = h
   }
 }
 
+/// A Swift reimplementation of BSD `getopt_long(3)` / `getopt_long_only(3)`.
+///
+/// `BSDGetopt_long` parses POSIX-style and GNU-style long options from an
+/// argument array.  Create an instance with an option string, a ``LongOption``
+/// table, and (optionally) an explicit argument array.  Call ``getopt_long()``
+/// (or ``getopt_long_only()``) in a loop until it returns `nil`.
+///
+/// Each successful call returns a tuple `(optionName, argument)` where
+/// `optionName` is either the matched long-option name or a single-character
+/// short-option string.
 public class BSDGetopt_long {
 
+  /// Current index into the argument array (equivalent to POSIX `optind`).
   var optind = 0
 
+  /// Internal flags controlling argument permutation and matching mode.
   struct GLFlags: OptionSet {
     let rawValue: UInt8
 
+    /// Permute non-option arguments to the end of the array.
     static let FLAG_PERMUTE = GLFlags(rawValue: 0x01)
+    /// Treat non-option arguments as arguments to the special option `"-1"`.
     static let FLAG_ALLARGS = GLFlags(rawValue: 0x02)
+    /// Operate as `getopt_long_only`, allowing long options with a single `-` prefix.
     static let FLAG_LONGONLY = GLFlags(rawValue: 0x04)
   }
 
-  //  let FLAG_PERMUTE = 0x01  /* permute non-options to the end of argv */
-  //  let FLAG_ALLARGS = 0x02  /* treat non-options as args to option "-1" */
-  //  let FLAG_LONGONLY = 0x04  /* operate as getopt_long_only */
-
-  /* return values */
+  /// The character returned for a bad argument (`":"` or `"?"`).
   let BADARG: String
 
+  /// When `true`, unknown-option errors are suppressed.
   var opterr = true
 
+  /// Sentinel returned as the option name when `FLAG_ALLARGS` is active and a non-option is seen.
   let INORDER = "\u{01}"
 
+  /// The option-definition string (e.g. `"abc:d::"` for `getopt`).
   var options: String
+  /// The long-option table.
   var long_options: [LongOption]
+  /// The argument array being parsed.
   var nargv: [String]
 
+  /// Whether POSIX-mode parsing is in effect (non-options stop parsing).
   var posixly_correct: Bool
 
+  /// The last unrecognised option character.
   var optopt: Character = "?"
+  /// The argument associated with the most recently parsed option.
   var optarg: String = ""
 
   let NO_PREFIX = -1
@@ -137,13 +168,23 @@ public class BSDGetopt_long {
   let DD_PREFIX = 1
   let W_PREFIX = 2
 
-  var nonopt_start = -1 // first non option argument (for permute)
-  var nonopt_end = -1   // first option after non options (for permute)
+  /// Index of the first non-option argument encountered (for permutation).
+  var nonopt_start = -1
+  /// Index of the first option argument after a run of non-options (for permutation).
+  var nonopt_end = -1
 
+  /// Records which dash prefix was used when a long option was detected.
   var dash_prefix = -1  // NO_PREFIX
 
+  /// The portion of the current argument that has not yet been consumed.
   var place = ""
 
+  /// Creates a `BSDGetopt_long` parser.
+  ///
+  /// - Parameters:
+  ///   - s: The option-definition string in `getopt(3)` format.
+  ///   - long_options: The long-option table.
+  ///   - args: The argument array to parse. Defaults to `CommandLine.arguments` (minus `argv[0]`).
   public init(
     _ s: String, _ long_options: [LongOption],
     _ args: [String] = Array(CommandLine.arguments.dropFirst())
@@ -159,7 +200,12 @@ public class BSDGetopt_long {
     posixly_correct = getenv("POSIXLY_CORRECT") != nil
   }
 
-  /// Compute the greatest common divisor of a and b.
+  /// Computes the greatest common divisor of two integers.
+  ///
+  /// - Parameters:
+  ///   - aa: First value.
+  ///   - bb: Second value.
+  /// - Returns: The GCD of `aa` and `bb`.
   func gcd(_ aa: Int, _ bb: Int) -> Int {
     var a = aa
     var b = bb
@@ -172,11 +218,15 @@ public class BSDGetopt_long {
     return b
   }
 
-  /**
-   * Exchange the block from nonopt_start to nonopt_end with the block
-   * from nonopt_end to opt_end (keeping the same order of arguments
-   * in each block).
-   */
+  /// Permutes the non-option arguments at `panonopt_start..<panonopt_end` to the
+  /// end of the range `panonopt_start..<opt_end`, preserving relative order within
+  /// both the non-option and option sub-arrays.
+  ///
+  /// - Parameters:
+  ///   - panonopt_start: Start index of the non-option block.
+  ///   - panonopt_end: One past the end of the non-option block (start of the option block).
+  ///   - opt_end: One past the end of the option block.
+  ///   - nargv: The argument array to permute in place.
   func permute_args(
     _ panonopt_start: Int, _ panonopt_end: Int, _ opt_end: Int,
     _ nargv: inout [String]
@@ -204,22 +254,24 @@ public class BSDGetopt_long {
     }
   }
 
-  /**
-   * parse_long_options --
-   *  Parse long options in argc/argv argument vector.
-   * Returns -1 if short_too is set and the option does not match long_options.
-   */
+  /// Attempts to match the current ``place`` string against the long-option table.
+  ///
+  /// Returns `nil` when `short_too` is set and no long match was found (so the
+  /// caller can fall through to short-option parsing).  Throws on ambiguous,
+  /// disallowed, or missing arguments.
+  ///
+  /// - Parameters:
+  ///   - short_too: When `true`, a single-character string is allowed to match a short option
+  ///     rather than being forced to match a long option.
+  ///   - flags: Internal ``GLFlags`` controlling behaviour.
+  /// - Returns: A `(name, argument)` tuple on success, or `nil` if no long match and `short_too`.
+  /// - Throws: ``CmdErr`` for ambiguous abbreviations, disallowed arguments, or missing arguments.
   func
     parse_long_options(_ short_too: Bool, _ flags: GLFlags) throws(CmdErr) -> (
       String, String
     )?
   {
-    //  char *current_argv, *has_equal;
-
     var current_dash: String = ""
-
-    //  size_t current_argv_len;
-    //  int i, match, exact_match, second_partial_match;
 
     let cur_argv = place
 
@@ -241,7 +293,6 @@ public class BSDGetopt_long {
     optind += 1
 
     var current_key: String
-    //    var current_val : String?
 
     let has_equal = cur_argv.firstIndex(of: "=")
     if let has_equal {
@@ -284,7 +335,6 @@ public class BSDGetopt_long {
 
     if match != -1 { // option found
       if let _ = has_equal, long_options[match].has_arg == .no_argument {
-        // FIXME: do I need to set optopt (or pass it to CmdErr)
         throw CmdErr(
           1, "option \(current_dash)\(current_key) doesn't allow an argument")
       }
@@ -305,7 +355,6 @@ public class BSDGetopt_long {
          * should be generated.
          */
         optind -= 1
-        // FIXME: do I need to pass optopt to the err?
         throw CmdErr(1, "option \(current_dash)\(current_key) requires an argument")
       }
     } else { // unknown option
@@ -321,10 +370,11 @@ public class BSDGetopt_long {
 
   // -=================================================================================================================
 
-  /**
-   * getopt_internal --
-   *  Parse argc/argv argument vector.  Called by user level routines.
-   */
+  /// Core option-parsing engine shared by ``getopt_long()`` and ``getopt_long_only()``.
+  ///
+  /// - Parameter flagsx: Internal flags controlling permutation and long-only mode.
+  /// - Returns: A `(optionName, argument)` tuple, or `nil` when all options are consumed.
+  /// - Throws: ``CmdErr`` for any option-parsing error.
   func getopt_internal(_ flagsx: GLFlags) throws(CmdErr) -> (String, String)? {
 
     var optchar: String = "?"
@@ -425,7 +475,7 @@ public class BSDGetopt_long {
       if place.first == "-" {
         place.removeFirst() /* --foo long option */
         if place.isEmpty {
-          throw CmdErr(1, "malformed option")  //  BADARG  /* malformed option */
+          throw CmdErr(1, "malformed option")
         }
 
         dash_prefix = DD_PREFIX
@@ -510,20 +560,27 @@ public class BSDGetopt_long {
       place = ""
       optind += 1
     }
-    // dump back option letter
+    // dump back option letter and argument
     return (optchar, optarg)
   }
 
-  /// Parse argc/argv argument vector.
+  /// Parses the next short or long option from the argument array, permuting non-options to the end.
+  ///
+  /// - Returns: A `(name, argument)` tuple, or `nil` when no more options remain.
+  /// - Throws: ``CmdErr`` on malformed or unrecognised options.
   public func getopt_long() throws(CmdErr) -> (String, String)? {
     return try getopt_internal(GLFlags.FLAG_PERMUTE)
   }
 
-  /// getopt_long_only -- Parse argc/argv argument vector.
+  /// Like ``getopt_long()``, but also recognises long options prefixed with a single `-`.
+  ///
+  /// - Returns: A `(name, argument)` tuple, or `nil` when no more options remain.
+  /// - Throws: ``CmdErr`` on malformed or unrecognised options.
   public func getopt_long_only() throws(CmdErr) -> (String, String)? {
     return try getopt_internal(GLFlags.FLAG_PERMUTE.union(.FLAG_LONGONLY))
   }
 
+  /// The argument array elements that were not consumed as options (available after parsing completes).
   public var remaining: [String] {
     return Array(nargv.dropFirst(optind))
   }
@@ -531,16 +588,30 @@ public class BSDGetopt_long {
 
 // ===================================================================
 
+/// A Swift reimplementation of BSD `getopt(3)`.
+///
+/// `BSDGetopt` parses traditional short options from an argument array.
+/// Create an instance with an option-definition string, then call
+/// ``getopt()`` in a loop until it returns `nil`.
 public class BSDGetopt {
-  var optarg: String = ""  // argument associated with option
+  /// The argument associated with the most recently parsed option.
+  var optarg: String = ""
 
+  /// The option-definition string (e.g. `"abc:d::"` where `:` means required argument and `::` means optional).
   var ostr: String
+  /// The remaining argument slice being parsed.
   var nargv: ArraySlice<String>
+  /// The portion of the current argument token not yet consumed.
   var place = ""
 
+  /// The program name, taken from `argv[0]`.
   let PROGNAME = CommandLine.arguments[0]
 
-  /// parse the command line options using the option definition string `ostr`.  Optionally, pass in the array of strings to be used as the argument array -- otherwise the default `CommandLine.arguments` will be used
+  /// Creates a `BSDGetopt` parser.
+  ///
+  /// - Parameters:
+  ///   - ostr: The option-definition string in `getopt(3)` format.
+  ///   - args: The argument array to parse. Defaults to `CommandLine.arguments` (minus `argv[0]`).
   public init(
     _ ostr: String, args: ArraySlice<String> = CommandLine.arguments.dropFirst()
   ) {
@@ -548,15 +619,23 @@ public class BSDGetopt {
     self.nargv = args
   }
 
-  /// return the arguments remaining after the options processing has completed
+  /// The argument array elements that were not consumed as options.
   public var remaining: [String] { Array(nargv) }
 
-  /// consume the next argument (assuming it has been processed elsewhere)
+  /// Discards the next `n` arguments from the front of the remaining array.
+  ///
+  /// - Parameter n: The number of arguments to skip. Defaults to `1`.
   public func skip(_ n: Int = 1) {
     nargv = nargv.dropFirst(n)
   }
 
-  /// Parse the next option -- returning the option character and the option argument (or nil if the next token is not an option)
+  /// Parses the next short option.
+  ///
+  /// Returns `nil` when the first non-option argument is encountered or when
+  /// `--` is reached, leaving unprocessed arguments in ``remaining``.
+  ///
+  /// - Returns: A `(optionCharacter, argument)` tuple, or `nil` when parsing is done.
+  /// - Throws: ``CmdErr`` on an illegal option character or missing required argument.
   public func getopt() throws(CmdErr) -> (Character, String)? {
     var optopt: Character = "?"  // character checked for validity
     guard nargv.count > 0 else {
@@ -572,7 +651,6 @@ public class BSDGetopt {
         return nil
       }
 
-      //    nargv.removeFirst()  // consume this token
       if place == "-" {
         nargv.removeFirst()
         place = ""
@@ -599,8 +677,6 @@ public class BSDGetopt {
       if place.isEmpty {
         nargv.removeFirst()
       }
-      //   place = nargv.count == 0 ? "" : nargv.removeFirst()
-      // }
       if ostr.first != ":" {
         throw CmdErr(1, "\(PROGNAME): illegal option -- \(optopt)")
       }

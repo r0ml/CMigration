@@ -3,60 +3,109 @@
 
 import Darwin
 
+/// Mount flags reported by `statfs(2)` / `fstatfs(2)`.
+///
+/// Each static member corresponds to the matching `MNT_*` constant from `<sys/mount.h>`.
 public struct FileSystemFlags : OptionSet, Sendable {
+  /// The raw bitmask value.
   public var rawValue : UInt32
 
+  /// Creates a `FileSystemFlags` from a raw bitmask.
   public init(rawValue: UInt32) {
     self.rawValue = rawValue
   }
 
+  /// The filesystem is mounted read-only.
   public static let RDONLY      = Self.init(rawValue: 0x00000001)
+  /// Filesystem operations are synchronous.
   public static let SYNCHRONOUS = Self.init(rawValue: 0x00000002)
+  /// Executables may not be launched from this filesystem.
   public static let NOEXEC      = Self.init(rawValue: 0x00000004)
+  /// Set-user-ID and set-group-ID bits are ignored on this filesystem.
   public static let NOSUID      = Self.init(rawValue: 0x00000008)
+  /// Device special files are ignored on this filesystem.
   public static let NODEV       = Self.init(rawValue: 0x00000010)
+  /// This is a union filesystem.
   public static let UNION       = Self.init(rawValue: 0x00000020)
+  /// Filesystem I/O is asynchronous.
   public static let ASYNC       = Self.init(rawValue: 0x00000040)
+  /// Data protection (iOS Data Protection) is enabled.
   public static let CPROTECT    = Self.init(rawValue: 0x00000080)
+  /// The filesystem is exported via NFS.
   public static let EXPORTED    = Self.init(rawValue: 0x00000100)
+  /// The filesystem resides on removable media.
   public static let REMOVABLE   = Self.init(rawValue: 0x00000200)
+  /// Downloaded content may be quarantined.
   public static let QUARANTINE  = Self.init(rawValue: 0x00000400)
-
+  /// The filesystem is local (not network-mounted).
   public static let LOCAL       = Self.init(rawValue: 0x00001000)
+  /// The filesystem has disk quotas enabled.
   public static let QUOTA       = Self.init(rawValue: 0x00002000)
+  /// This is the root filesystem.
   public static let ROOTFS      = Self.init(rawValue: 0x00004000)
+  /// The filesystem supports `.vol` (volume) file references.
   public static let DOVOLFS     = Self.init(rawValue: 0x00008000)
+  /// The filesystem should not appear in directory listings.
   public static let DONTBROWSE  = Self.init(rawValue: 0x00100000)
+  /// Ownership information is ignored on this filesystem.
   public static let IGNORE_OWNERSHIP = Self.init(rawValue: 0x00200000)
+  /// The filesystem was automatically mounted.
   public static let AUTOMOUNTED = Self.init(rawValue: 0x00400000)
+  /// The filesystem uses journaling.
   public static let JOURNALED   = Self.init(rawValue: 0x00800000)
+  /// Extended attributes are not supported.
   public static let NOUSERXATTR = Self.init(rawValue: 0x01000000)
+  /// The filesystem defers writes for better performance.
   public static let DEFWRITE    = Self.init(rawValue: 0x02000000)
+  /// The filesystem supports multi-label MAC.
   public static let MULTILABEL  = Self.init(rawValue: 0x04000000)
+  /// Symbolic links are not followed when accessing this volume.
   public static let NOFOLLOW    = Self.init(rawValue: 0x08000000)
+  /// Access times are not updated (noatime).
   public static let NOATIME     = Self.init(rawValue: 0x10000000)
-
+  /// This is a snapshot mount.
   public static let SNAPSHOT    = Self.init(rawValue: 0x40000000)
+  /// Access times are updated with full precision (strictatime).
   public static let STRICTATIME = Self.init(rawValue: 0x80000000)
 }
 
+/// A Swift representation of the POSIX `statfs` structure, describing a mounted filesystem.
 public struct FileSystemMetadata {
-  public var bsize : UInt        /* fundamental file system block size */
-  public var iosize : UInt       /* optimal transfer block size */
-  public var blocks : UInt       /* total data blocks in file system */
-  public var bfree : UInt        /* free blocks in fs */
-  public var bavail : UInt       /* free blocks avail to non-superuser */
-  public var files : UInt        /* total file nodes in file system */
-  public var ffree : UInt        /* free file nodes in fs */
-  public var fsid : (UInt32, UInt32)  /* file system id */
-  public var owner : UInt        /* user that mounted the filesystem */
-  public var type : UInt         /* type of filesystem */
-  public var flags : FileSystemFlags   /* copy of mount exported flags */
-  public var fssubtype : UInt    /* fs sub-type (flavor) */
+  /// Fundamental filesystem block size, in bytes.
+  public var bsize : UInt
+  /// Optimal transfer block size, in bytes.
+  public var iosize : UInt
+  /// Total number of data blocks in the filesystem.
+  public var blocks : UInt
+  /// Number of free blocks in the filesystem.
+  public var bfree : UInt
+  /// Number of free blocks available to non-superuser processes.
+  public var bavail : UInt
+  /// Total number of file nodes (inodes) in the filesystem.
+  public var files : UInt
+  /// Number of free file nodes in the filesystem.
+  public var ffree : UInt
+  /// Filesystem identifier as a pair of 32-bit values.
+  public var fsid : (UInt32, UInt32)
+  /// User ID of the user that mounted the filesystem.
+  public var owner : UInt
+  /// Numeric filesystem type identifier.
+  public var type : UInt
+  /// Mount option flags for this filesystem.
+  public var flags : FileSystemFlags
+  /// Filesystem subtype (flavor) identifier.
+  public var fssubtype : UInt
+  /// Short name of the filesystem type (e.g. `"hfs"`, `"apfs"`).
   public var fstypename : String
+  /// Path of the directory on which the filesystem is mounted.
   public var mntonname : String
+  /// Name of the device from which the filesystem was mounted.
   public var mntfromname : String
 
+  /// Creates a `FileSystemMetadata` by calling `statfs(2)` on the given path.
+  ///
+  /// - Parameter x: An absolute or relative path within the mounted volume.
+  /// - Throws: ``POSIXErrno`` if `statfs` fails.
   public init(for x: String) throws(POSIXErrno) {
     var sfs = statfs()
     let e = statfs(x, &sfs)
@@ -64,6 +113,10 @@ public struct FileSystemMetadata {
     self.init(from: sfs)
   }
 
+  /// Creates a `FileSystemMetadata` by calling `fstatfs(2)` on the given open file descriptor.
+  ///
+  /// - Parameter x: An open `FileDescriptor` on the desired volume.
+  /// - Throws: ``POSIXErrno`` if `fstatfs` fails.
   public init(for x : FileDescriptor) throws(POSIXErrno) {
     var sfs = statfs()
     let e = fstatfs(x.rawValue, &sfs)
@@ -71,6 +124,7 @@ public struct FileSystemMetadata {
     self.init(from: sfs)
   }
 
+  /// Creates a zeroed `FileSystemMetadata` with all fields set to their default values.
   public init() {
     bsize = 0
     iosize = 0
@@ -84,12 +138,14 @@ public struct FileSystemMetadata {
     type = 0
     flags = []
     fssubtype = 0
-    
     fstypename = ""
     mntonname = ""
     mntfromname = ""
   }
 
+  /// Creates a `FileSystemMetadata` by copying fields from a raw `statfs` structure.
+  ///
+  /// - Parameter sfs: The `statfs` structure returned by the kernel.
   public init(from sfs : statfs) {
     bsize = UInt(sfs.f_bsize)
     iosize = UInt(sfs.f_iosize)
@@ -104,7 +160,6 @@ public struct FileSystemMetadata {
     flags = FileSystemFlags(rawValue: sfs.f_flags)
     fssubtype = UInt(sfs.f_fssubtype)
 
-
     fstypename = withUnsafeBytes(of: sfs.f_fstypename) {jj in
       return String(String(decoding: jj, as: UTF8.self).prefix { $0 != "\0" })
     }
@@ -116,7 +171,5 @@ public struct FileSystemMetadata {
     mntfromname = withUnsafeBytes(of: sfs.f_mntfromname) {jj in
       return String(String(decoding: jj, as: UTF8.self).prefix { $0 != "\0" })
     }
-
   }
 }
-

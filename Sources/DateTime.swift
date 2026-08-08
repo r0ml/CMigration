@@ -3,7 +3,13 @@
 
 import Darwin
 
+/// A high-resolution timestamp composed of whole seconds and nanoseconds.
+///
+/// `DateTime` is a lightweight, `Comparable` value type that wraps the POSIX `timespec`
+/// structure.  It is used throughout CMigration wherever file timestamps or elapsed
+/// time measurements are needed.
 public struct DateTime : Comparable {
+  /// Returns `true` when `lhs` represents a point in time strictly before `rhs`.
   public static func < (lhs: DateTime, rhs: DateTime) -> Bool {
     if lhs.secs < rhs.secs { return true }
     if lhs.secs == rhs.secs {
@@ -12,44 +18,74 @@ public struct DateTime : Comparable {
     return false
   }
 
+  /// The whole-seconds component of the timestamp (equivalent to `timespec.tv_sec`).
   public var secs : Int
+
+  /// The sub-second nanoseconds component of the timestamp (equivalent to `timespec.tv_nsec`).
   public var nanosecs : Int
 
+  /// Creates a `DateTime` from a POSIX `timespec`.
+  ///
+  /// - Parameter t: A `Darwin.timespec` value.
   public init(_ t : Darwin.timespec) {
     secs = t.tv_sec
     nanosecs = t.tv_nsec
   }
 
+  /// Creates a `DateTime` with whole-second resolution from any `BinaryInteger`.
+  ///
+  /// The nanoseconds component is set to zero.
+  ///
+  /// - Parameter t: A whole-second count.
   public init(_ t : any BinaryInteger) {
     secs = Int(t)
     nanosecs = 0
   }
 
+  /// Creates a `DateTime` with whole-second resolution from a `time_t`.
+  ///
+  /// The nanoseconds component is set to zero.
+  ///
+  /// - Parameter t: A POSIX `time_t` value.
   public init(_ t : Darwin.time_t) {
     secs = t
     nanosecs = 0
   }
 
+  /// Creates a `DateTime` representing the current wall-clock time.
+  ///
+  /// Uses `clock_gettime(CLOCK_REALTIME, …)` for nanosecond resolution.
   public init() {
     var ts = Darwin.timespec()
-    clock_gettime(CLOCK_REALTIME, &ts) // != 0 { perror("clock_gettime") }
-    secs = ts.tv_sec        // time_t
-    nanosecs = ts.tv_nsec   // long
+    clock_gettime(CLOCK_REALTIME, &ts)
+    secs = ts.tv_sec
+    nanosecs = ts.tv_nsec
   }
 
+  /// The timestamp expressed as a `Double` (seconds since the Unix epoch).
   public var timeInterval : Double {
     Double(secs) + Double(nanosecs) / 1_000_000_000
   }
 
+  /// The timestamp expressed as a POSIX `timespec`.
   public var timespec : Darwin.timespec {
     return Darwin.timespec(tv_sec: secs, tv_nsec: nanosecs)
   }
 
+  /// Creates a `DateTime` by parsing an ISO 8601 date string.
+  ///
+  /// Recognises the following formats (all interpreted as UTC):
+  /// - `YYYY-MM-DDThh:mm:ssZ`
+  /// - `YYYY-MM-DDThh:mm:ss`
+  /// - `YYYY-MM-DD`
+  ///
+  /// - Parameter s: An ISO 8601 date string.
+  /// - Throws: ``POSIXErrno`` with `EINVAL` if the string cannot be parsed or
+  ///   the resulting time is negative.
   public init(fromISO8601 s: String) throws {
     var tm = tm()
     memset(&tm, 0, MemoryLayout<tm>.size)
 
-    // Try full date-time with optional 'Z'
     let formats = [
       "%Y-%m-%dT%H:%M:%SZ",
       "%Y-%m-%dT%H:%M:%S",
@@ -68,7 +104,6 @@ public struct DateTime : Comparable {
       throw POSIXErrno(EINVAL, fn: "parsing ISO8601 date string")
     }
 
-    // Force UTC
     tm.tm_isdst = 0
 
     let seconds = timegm(&tm)
@@ -79,16 +114,23 @@ public struct DateTime : Comparable {
     self.init(seconds)
   }
 
-
+  /// Returns a new `DateTime` offset by `rhs` whole seconds into the future.
+  ///
+  /// - Parameters:
+  ///   - lhs: The base timestamp.
+  ///   - rhs: The number of seconds to add.
+  /// - Returns: A new `DateTime` with `secs` incremented by `rhs`.
   public static func + (lhs: DateTime, rhs: Int) -> DateTime {
     DateTime(Darwin.timespec(tv_sec: lhs.secs + rhs, tv_nsec: lhs.nanosecs))
   }
 
+  /// Returns a new `DateTime` offset by `rhs` whole seconds into the past.
+  ///
+  /// - Parameters:
+  ///   - lhs: The base timestamp.
+  ///   - rhs: The number of seconds to subtract.
+  /// - Returns: A new `DateTime` with `secs` decremented by `rhs`.
   public static func - (lhs: DateTime, rhs: Int) -> DateTime {
     DateTime(Darwin.timespec(tv_sec: lhs.secs - rhs, tv_nsec: lhs.nanosecs))
   }
-
 }
-
-
-

@@ -26,7 +26,7 @@
  */
 /*-
  * Copyright (c) 1993
- *  The Regents of the University of California.  All rights reserved.
+ *	The Regents of the University of California.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -38,8 +38,8 @@
  *    documentation and/or other materials provided with the distribution.
  * 3. All advertising materials mentioning features or use of this software
  *    must display the following acknowledgement:
- *  This product includes software developed by the University of
- *  California, Berkeley and its contributors.
+ *	This product includes software developed by the University of
+ *	California, Berkeley and its contributors.
  * 4. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
@@ -59,6 +59,10 @@
 
 // From LibC
 
+/// Maps human-readable flag names to their corresponding ``FileFlags`` values for *setting* flags.
+///
+/// Both short (e.g. `"schg"`) and long (e.g. `"schange"`) names are included.
+/// Used by ``strtofflags(_:)`` and ``fflagstostr(_:)``.
 public let setMapping = [
   /* shorter names per flag first */
   "sappnd" : FileFlags.SF_APPEND,
@@ -84,6 +88,10 @@ public let setMapping = [
   "dataless" : .SF_DATALESS,
 ]
 
+/// Maps human-readable flag names to their corresponding ``FileFlags`` values for *clearing* flags.
+///
+/// Names are prefixed with `"no"` relative to the matching entry in ``setMapping``.
+/// Used by ``strtofflags(_:)``.
 public let clrMapping = [
   /* shorter names per flag first */
   "nosappnd" : FileFlags.SF_APPEND,
@@ -109,15 +117,16 @@ public let clrMapping = [
   "nodataless" : .SF_DATALESS,
 ]
 
-
+/// The length of the longest flag name string in ``setMapping`` / ``clrMapping``.
 public let longestflaglen = 12
- // #define nmappings  (sizeof(mapping) / sizeof(mapping[0]))
 
-/*
- * fflagstostr --
- *  Convert file flags to a comma-separated string.  If no flags
- *  are set, return the empty string.
- */
+/// Converts a ``FileFlags`` bitmask to a comma-separated string of symbolic flag names.
+///
+/// The shortest registered name for each set flag is used.  If no flags are set,
+/// an empty string is returned.
+///
+/// - Parameter flags: The file-flags bitmask to convert.
+/// - Returns: A comma-separated string of flag names, or `""` if no flags are set.
 public func fflagstostr( _ flags : FileFlags) -> String? {
   var rmap : [FileFlags : String] = [:]
   for (k, v) in setMapping {
@@ -141,12 +150,14 @@ public func fflagstostr( _ flags : FileFlags) -> String? {
   return dp
 }
 
-/*
- * strtofflags --
- *  Take string of arguments and return file flags.  Return 0 on
- *  success, 1 on failure.  On failure, stringp is set to point
- *  to the offending token.
- */
+/// Parses a tab-separated string of flag names and returns the flags to set and clear.
+///
+/// Each token is looked up in ``setMapping`` (flags to set) and then ``clrMapping``
+/// (flags to clear).  Returns `nil` if any token is unrecognised.
+///
+/// - Parameter stringp: A tab-separated list of flag name tokens.
+/// - Returns: A tuple `(setp, clrp)` where `setp` is the union of flags to set and
+///   `clrp` is the union of flags to clear; or `nil` if an unknown token is encountered.
 public func strtofflags(_ stringp : String) -> (FileFlags, FileFlags)? {
   var setp = FileFlags()
   var clrp = FileFlags()
