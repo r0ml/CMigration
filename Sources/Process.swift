@@ -216,12 +216,43 @@ public actor DarwinProcess {
     args arguments: any Arguable...,
     env : [String : String] = [:],
     cd : FilePath? = nil,
-    captureOutput: Bool = true
+    output: (FileDescriptor?, FileDescriptor?)? = nil
   ) async throws(POSIXErrno) -> DarwinProcess {
     let p = DarwinProcess()
-    let _ = try await p.launch(executablePath, withStdin: withStdin, args: arguments, env: env, cd: cd, captureOutput: captureOutput)
+    let _ = try await p.launch(executablePath, withStdin: withStdin, args: arguments, env: env, cd: cd, output: output)
     return p
   }
+
+    /*
+  /// Convenience static factory that redirects stdout and stderr to the supplied file descriptors.
+  ///
+  /// Pass `.standardOutput` / `.standardError` to inherit the caller's streams.
+  ///
+  /// - Parameters:
+  ///   - executablePath: The executable to run.
+  ///   - withStdin: Optional standard input.
+  ///   - arguments: Command-line arguments (variadic).
+  ///   - env: Extra environment variables merged over the parent's environment.
+  ///   - cd: Optional working directory for the child.
+  ///   - stdout: File descriptor for the child's stdout, or `nil` to capture.
+  ///   - stderr: File descriptor for the child's stderr, or `nil` to capture.
+  /// - Returns: A running `DarwinProcess`.
+  /// - Throws: ``POSIXErrno`` if spawning fails.
+  public static func launch(
+    _ executablePath: String,
+    withStdin: (any Stdinable)? = nil,
+    args arguments: any Arguable...,
+    env : [String : String] = [:],
+    cd : FilePath? = nil,
+
+    stdout: FileDescriptor? = nil,
+    stderr: FileDescriptor? = nil
+  ) async throws(POSIXErrno) -> DarwinProcess {
+    let p = DarwinProcess()
+    let _ = try await p.launch(executablePath, withStdin: withStdin, args: arguments, env: env, cd: cd, stdout: stdout, stderr: stderr)
+    return p
+  }
+*/
 
   /// Launches the process with variadic arguments (instance method).
   ///
@@ -240,13 +271,50 @@ public actor DarwinProcess {
     args arguments: any Arguable...,
     env : [String : String] = [:],
     cd : FilePath? = nil,
-    captureOutput: Bool = true
+    output: (FileDescriptor?, FileDescriptor?)? = nil
   ) throws(POSIXErrno) -> pid_t {
-    return try launch(executablePath, withStdin: withStdin, args: arguments, env: env, cd: cd, captureOutput: captureOutput)
+    return try launch(executablePath, withStdin: withStdin, args: arguments, env: env, cd: cd, output: output)
   }
+
+  /*
+  /// Launches the process, redirecting stdout and stderr to the supplied file descriptors.
+  ///
+  /// Pass `.standardOutput` / `.standardError` to inherit the caller's streams, or any
+  /// writable ``FileDescriptor`` to redirect to an arbitrary destination. A `nil` value
+  /// captures that stream into the ``Output`` returned by ``value()``.
+  ///
+  /// - Parameters:
+  ///   - executablePath: The executable to run.
+  ///   - withStdin: Optional standard input.
+  ///   - arguments: Command-line arguments (variadic).
+  ///   - env: Extra environment variables merged over the parent's environment.
+  ///   - cd: Optional working directory.
+  ///   - stdout: File descriptor to use for the child's stdout, or `nil` to capture.
+  ///   - stderr: File descriptor to use for the child's stderr, or `nil` to capture.
+  /// - Returns: The child PID.
+  /// - Throws: ``POSIXErrno`` if spawning fails.
+  public func launch(
+    _ executablePath: String,
+    withStdin: (any Stdinable)? = nil,
+    args arguments: any Arguable...,
+    env : [String : String] = [:],
+    cd : FilePath? = nil,
+    stdout: FileDescriptor? = nil,
+    stderr: FileDescriptor? = nil
+  ) throws(POSIXErrno) -> pid_t {
+    return try launch(executablePath, withStdin: withStdin, args: arguments, env: env, cd: cd, stdout: stdout, stderr: stderr)
+  }
+*/
 
   /// Core launch implementation: sets up pipes, configures `posix_spawn` file actions,
   /// spawns the child, and kicks off background I/O tasks.
+  ///
+  /// stdout and stderr routing follow this priority order:
+  /// 1. If `stdout`/`stderr` is non-nil, the child's stream is dup2'd to that descriptor
+  ///    (pass `.standardOutput` / `.standardError` to inherit the caller's streams).
+  /// 2. If `stdout` is nil and `captureOutput` is `true`, stdout is captured into ``pendingOutput``.
+  /// 3. If `stdout` is nil and `captureOutput` is `false`, stdout is inherited via `addinherit_np`.
+  /// 4. If `stderr` is nil, stderr is always captured into the ``Output/error`` field.
   ///
   /// - Parameters:
   ///   - execu: The executable name or path (resolved via `PATH` if not absolute).
@@ -254,7 +322,9 @@ public actor DarwinProcess {
   ///   - arguments: Command-line arguments.
   ///   - env: Extra environment variables merged over the parent's environment.
   ///   - cd: Optional working directory (macOS only, via `posix_spawn_file_actions_addchdir_np`).
-  ///   - captureOutput: When `true`, stdout is captured into ``pendingOutput``.
+  ///   - captureOutput: When `true` and `stdout` is nil, stdout is captured into ``pendingOutput``.
+  ///   - stdout: When non-nil, the child's stdout is dup2'd to this descriptor instead of being piped.
+  ///   - stderr: When non-nil, the child's stderr is dup2'd to this descriptor instead of being piped.
   /// - Returns: The child PID.
   /// - Throws: ``POSIXErrno`` if any system call fails.
   public func launch(
@@ -263,9 +333,8 @@ public actor DarwinProcess {
     args arguments: [any Arguable] = [],
     env : [String : String] = [:],
     cd : FilePath? = nil,
-    captureOutput: Bool = true
+    output: (FileDescriptor?, FileDescriptor?)? = (nil, nil)
   ) throws(POSIXErrno) -> pid_t {
-    // Pipes for stdout/stderr (always captured)
     if launched { fatalError("already launched once") }
     launched = true
 
@@ -274,9 +343,15 @@ public actor DarwinProcess {
     }
 
     var stdoutW : FileDescriptor? = nil
-    var stderrW : FileDescriptor
-
-    if captureOutput {
+    var stderrW : FileDescriptor? = nil
+    let captureOutput = output == nil
+    var stdout : FileDescriptor?
+    var stderr : FileDescriptor?
+    if let output {
+      stdout = output.0
+      stderr = output.1
+    }
+    if stdout == nil && captureOutput {
       do {
         (stdoutR, stdoutW) = try FileDescriptor.pipe()
       } catch(let e as Errno) {
@@ -291,18 +366,20 @@ public actor DarwinProcess {
         }
     }
 
-    do {
-      (stderrR, stderrW) = try FileDescriptor.pipe()
-    } catch(let e as Errno) {
-      throw log(POSIXErrno(e.rawValue, fn: "pipe", reason: "creating stderr pipe"))
-    } catch(let e) {
-      throw log(POSIXErrno(-1, fn: "pipe", reason: "creating stderr pipe: \(e)"))
+    if stderr == nil && captureOutput {
+      do {
+        (stderrR, stderrW) = try FileDescriptor.pipe()
+      } catch(let e as Errno) {
+        throw log(POSIXErrno(e.rawValue, fn: "pipe", reason: "creating stderr pipe"))
+      } catch(let e) {
+        throw log(POSIXErrno(-1, fn: "pipe", reason: "creating stderr pipe: \(e)"))
+      }
     }
 
 
     // Not needed on Darwin because of SPAWN_CLOEXEC -- but needed on other platforms
     stderrR?.setCloexec()
-    stderrW.setCloexec()
+    stderrW?.setCloexec()
     stdoutR?.setCloexec()
     stdoutW?.setCloexec()
 
@@ -369,7 +446,9 @@ public actor DarwinProcess {
     }
 
     do {
-      if !captureOutput {
+      if let explicitStdout = stdout {
+        try addDup2AndClose(&actions, from: explicitStdout.rawValue, to: STDOUT_FILENO, closeSourceInChild: false)
+      } else if !captureOutput {
         let rcInheritStdout = posix_spawn_file_actions_addinherit_np(&actions, STDOUT_FILENO)
         if rcInheritStdout != 0 {
           throw log(POSIXErrno(rcInheritStdout, fn: "posix_spawn_file_actions_addinherit_np(stdout)"))
@@ -377,7 +456,11 @@ public actor DarwinProcess {
       } else {
         try addDup2AndClose(&actions, from: stdoutW!.rawValue, to: STDOUT_FILENO, closeSourceInChild: true)
       }
-      try addDup2AndClose(&actions, from: stderrW.rawValue, to: STDERR_FILENO, closeSourceInChild: true)
+      if let explicitStderr = stderr {
+        try addDup2AndClose(&actions, from: explicitStderr.rawValue, to: STDERR_FILENO, closeSourceInChild: false)
+      } else {
+        try addDup2AndClose(&actions, from: stderrW!.rawValue, to: STDERR_FILENO, closeSourceInChild: true)
+      }
     } catch(let e as Errno) {
       throw log(POSIXErrno(e.rawValue, fn: "addDup2AndClose", reason: "redirecting stdio"))
     } catch(let e) {
@@ -466,7 +549,7 @@ public actor DarwinProcess {
 
     do {
       try stdoutW?.close()
-      try stderrW.close()
+      try stderrW?.close()
     } catch(let e as Errno) {
       let p = POSIXErrno(e.rawValue, fn: "close", reason: "closing stderrW or stdoutW" )
       throw p
@@ -495,10 +578,11 @@ public actor DarwinProcess {
         }
     }
 
-    let se = stderrR!
-    errorTask = Task.detached {
-      let res = try se.readAsString()
-      return res
+    if let se = stderrR {
+      errorTask = Task.detached {
+        let res = try se.readAsString()
+        return res
+      }
     }
 
 
@@ -549,9 +633,9 @@ public actor DarwinProcess {
     args arguments: any Arguable...,
     env : [String : String] = [:],
     cd : FilePath? = nil,
-    captureOutput: Bool = true
+    output: (FileDescriptor?, FileDescriptor?)? = nil
   ) async throws -> Output {
-    return try await run(executablePath, withStdin: withStdin, args: arguments, env: env, cd: cd, captureOutput: captureOutput)
+    return try await run(executablePath, withStdin: withStdin, args: arguments, env: env, cd: cd, output: output)
   }
 
   /// Launches the process with an array of arguments and immediately awaits the result.
@@ -571,7 +655,7 @@ public actor DarwinProcess {
     args arguments: [any Arguable] = [],
     env : [String : String] = [:],
     cd : FilePath? = nil,
-    captureOutput: Bool = true
+    output: (FileDescriptor?, FileDescriptor?)? = nil
   ) async throws -> Output {
 
     let _ = try launch(
@@ -580,11 +664,74 @@ public actor DarwinProcess {
       args: arguments,
       env: env,
       cd: cd,
-      captureOutput: captureOutput
+      output: output
     )
 
     return try await value()
   }
+
+  /*
+  /// Launches the process and immediately awaits the result, redirecting stdout/stderr as specified.
+  ///
+  /// Pass `.standardOutput` / `.standardError` to inherit the caller's streams, or any writable
+  /// ``FileDescriptor`` for an arbitrary destination. A `nil` value captures that stream.
+  ///
+  /// - Parameters:
+  ///   - executablePath: The executable to run.
+  ///   - withStdin: Optional standard input.
+  ///   - arguments: Command-line arguments (variadic).
+  ///   - env: Extra environment variables.
+  ///   - cd: Optional working directory.
+  ///   - stdout: File descriptor for the child's stdout, or `nil` to capture.
+  ///   - stderr: File descriptor for the child's stderr, or `nil` to capture.
+  /// - Returns: The ``Output`` produced by the child process.
+  /// - Throws: Any error from launch or ``value()``.
+  public func run(
+    _ executablePath: String,
+    withStdin: (any Stdinable)? = nil,
+    args arguments: any Arguable...,
+    env : [String : String] = [:],
+    cd : FilePath? = nil,
+    stdout: FileDescriptor? = nil,
+    stderr: FileDescriptor? = nil
+  ) async throws -> Output {
+    return try await run(executablePath, withStdin: withStdin, args: arguments, env: env, cd: cd, stdout: stdout, stderr: stderr)
+  }
+
+  /// Launches the process with an array of arguments and immediately awaits the result,
+  /// redirecting stdout/stderr to the supplied file descriptors.
+  ///
+  /// - Parameters:
+  ///   - executablePath: The executable to run.
+  ///   - withStdin: Optional standard input.
+  ///   - arguments: Command-line arguments.
+  ///   - env: Extra environment variables.
+  ///   - cd: Optional working directory.
+  ///   - stdout: File descriptor for the child's stdout, or `nil` to capture.
+  ///   - stderr: File descriptor for the child's stderr, or `nil` to capture.
+  /// - Returns: The ``Output`` produced by the child process.
+  /// - Throws: Any error from launch or ``value()``.
+  public func run(
+    _ executablePath: String,
+    withStdin: (any Stdinable)? = nil,
+    args arguments: [any Arguable] = [],
+    env : [String : String] = [:],
+    cd : FilePath? = nil,
+    stdout: FileDescriptor? = nil,
+    stderr: FileDescriptor? = nil
+  ) async throws -> Output {
+    let _ = try launch(
+      executablePath,
+      withStdin: withStdin,
+      args: arguments,
+      env: env,
+      cd: cd,
+      stdout: stdout,
+      stderr: stderr
+    )
+    return try await value()
+  }
+*/
 
   /// Waits for all I/O tasks to complete and collects the process exit code and captured output.
   ///
@@ -601,13 +748,18 @@ public actor DarwinProcess {
 
     async let status: Int32 = waitForExit(pid: pid)
     async let _ = feederTask?.value
-    async let stderr = errorTask!.value
 
     try await readerTask?.value
     let stdout = pendingOutput
 
+    let stderrOutput: String
+    if let et = errorTask {
+      stderrOutput = try await et.value
+    } else {
+      stderrOutput = ""
+    }
 
-    let res = try await Output(code: status, data: stdout, error: stderr)
+    let res = try await Output(code: status, data: stdout, error: stderrOutput)
 
     // Close read ends after drain
     try? stdoutR?.close()
