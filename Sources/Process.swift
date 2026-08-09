@@ -353,7 +353,7 @@ public actor DarwinProcess {
       stdout = output.0
       stderr = output.1
     }
-    if stdout == nil && captureOutput {
+    if captureOutput {
       do {
         (stdoutR, stdoutW) = try FileDescriptor.pipe()
       } catch(let e as Errno) {
@@ -366,9 +366,7 @@ public actor DarwinProcess {
         } catch(let e) {
           throw POSIXErrno(e.rawValue)
         }
-    }
 
-    if stderr == nil && captureOutput {
       do {
         (stderrR, stderrW) = try FileDescriptor.pipe()
       } catch(let e as Errno) {
