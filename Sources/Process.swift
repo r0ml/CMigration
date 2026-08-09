@@ -378,10 +378,10 @@ public actor DarwinProcess {
 
 
     // Not needed on Darwin because of SPAWN_CLOEXEC -- but needed on other platforms
-    stderrR?.setCloexec()
-    stderrW?.setCloexec()
-    stdoutR?.setCloexec()
-    stdoutW?.setCloexec()
+//    stderrR?.setCloexec()
+//    stderrW?.setCloexec()
+//    stdoutR?.setCloexec()
+//    stdoutW?.setCloexec()
 
 
     // posix_spawn file actions are optional-opaque on Darwin in Swift
