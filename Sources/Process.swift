@@ -447,7 +447,16 @@ public actor DarwinProcess {
 
     do {
       if let explicitStdout = stdout {
-        try addDup2AndClose(&actions, from: explicitStdout.rawValue, to: STDOUT_FILENO, closeSourceInChild: false)
+        if explicitStdout.rawValue == STDOUT_FILENO {
+          // dup2(1,1) is a no-op under POSIX_SPAWN_CLOEXEC_DEFAULT and the kernel excludes fd 1
+          // from the "explicitly assigned" set, so it gets closed before exec. addinherit_np
+          // is the correct primitive for preserving an fd that may be a pipe (e.g. a test
+          // harness capturing our output).
+          let rc = posix_spawn_file_actions_addinherit_np(&actions, STDOUT_FILENO)
+          if rc != 0 { throw log(POSIXErrno(rc, fn: "posix_spawn_file_actions_addinherit_np(stdout)")) }
+        } else {
+          try addDup2AndClose(&actions, from: explicitStdout.rawValue, to: STDOUT_FILENO, closeSourceInChild: false)
+        }
       } else if !captureOutput {
         let rcInheritStdout = posix_spawn_file_actions_addinherit_np(&actions, STDOUT_FILENO)
         if rcInheritStdout != 0 {
@@ -457,7 +466,13 @@ public actor DarwinProcess {
         try addDup2AndClose(&actions, from: stdoutW!.rawValue, to: STDOUT_FILENO, closeSourceInChild: true)
       }
       if let explicitStderr = stderr {
-        try addDup2AndClose(&actions, from: explicitStderr.rawValue, to: STDERR_FILENO, closeSourceInChild: false)
+        if explicitStderr.rawValue == STDERR_FILENO {
+          // Same addinherit_np reasoning as stdout above.
+          let rc = posix_spawn_file_actions_addinherit_np(&actions, STDERR_FILENO)
+          if rc != 0 { throw log(POSIXErrno(rc, fn: "posix_spawn_file_actions_addinherit_np(stderr)")) }
+        } else {
+          try addDup2AndClose(&actions, from: explicitStderr.rawValue, to: STDERR_FILENO, closeSourceInChild: false)
+        }
       } else if captureOutput {
         try addDup2AndClose(&actions, from: stderrW!.rawValue, to: STDERR_FILENO, closeSourceInChild: true)
       } else {
