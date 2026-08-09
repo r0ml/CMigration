@@ -85,7 +85,11 @@ extension FileDescriptor {
   /// - Parameter forWriting: The file path to open.
   /// - Throws: `Errno` if the file cannot be opened.
   public init(forWriting: String) throws {
-    self = try Self.open(forWriting, .writeOnly, options: [.create, .truncate])
+    do {
+      self = try Self.open(forWriting, .writeOnly, options: [.create, .truncate])
+    } catch(let e) {
+      print(e.localizedDescription)
+    }
   }
 
   /// Opens `forUpdating` for both reading and writing.
