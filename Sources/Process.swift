@@ -458,8 +458,11 @@ public actor DarwinProcess {
       }
       if let explicitStderr = stderr {
         try addDup2AndClose(&actions, from: explicitStderr.rawValue, to: STDERR_FILENO, closeSourceInChild: false)
-      } else {
+      } else if captureOutput {
         try addDup2AndClose(&actions, from: stderrW!.rawValue, to: STDERR_FILENO, closeSourceInChild: true)
+      } else {
+        let rc = posix_spawn_file_actions_addinherit_np(&actions, STDERR_FILENO)
+        if rc != 0 { throw log(POSIXErrno(rc, fn: "posix_spawn_file_actions_addinherit_np(stderr)")) }
       }
     } catch(let e as Errno) {
       throw log(POSIXErrno(e.rawValue, fn: "addDup2AndClose", reason: "redirecting stdio"))
@@ -812,6 +815,14 @@ public actor DarwinProcess {
     to: Int32,
     closeSourceInChild: Bool
   ) throws {
+    if from == to {
+      // dup2(fd, fd) is a POSIX no-op and does not clear the close-on-exec flag
+      // set by POSIX_SPAWN_CLOEXEC_DEFAULT. Use addinherit_np to explicitly mark
+      // the fd as inherited so it survives exec.
+      let rc = posix_spawn_file_actions_addinherit_np(&actions, to)
+      if rc != 0 { throw POSIXErrno(rc, fn: "posix_spawn_file_actions_addinherit_np") }
+      return
+    }
     let rc = posix_spawn_file_actions_adddup2(&actions, from, to)
     if rc != 0 { throw POSIXErrno(rc, fn: "posix_spawn_file_actions_adddup2") }
 
