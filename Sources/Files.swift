@@ -89,6 +89,7 @@ extension FileDescriptor {
       self = try Self.open(forWriting, .writeOnly, options: [.create, .truncate])
     } catch(let e) {
       print(e.localizedDescription)
+      self = try Self.open(forWriting, .writeOnly)
     }
   }
 
