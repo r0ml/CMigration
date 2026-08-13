@@ -149,8 +149,13 @@ public actor DarwinProcess {
 
   /// The captured output of a completed child process.
   public struct Output : Sendable {
-    /// The process exit code.
+    /// The process exit code: `WEXITSTATUS()` for a normal exit, or `128 + signal` for a
+    /// process terminated by a signal. This is the conventional shell `$?` encoding.
     public let code : Int32
+    /// The raw status word as returned by `waitpid(2)`, for callers that need a different
+    /// decoding than `code`'s shell convention (see `WIFEXITED`/`WEXITSTATUS`/`WIFSIGNALED`/
+    /// `WTERMSIG`/`WCOREDUMP`, or ``awkSystemStatus``).
+    public let rawStatus : Int32
     /// The raw bytes written to standard output.
     public let data : [UInt8]
     /// The text written to standard error.
@@ -158,6 +163,19 @@ public actor DarwinProcess {
 
     /// The standard output decoded as a UTF-8 string.
     public var string : String { String(decoding: data, as: UTF8.self) }
+
+    /// The exit status using the convention awk's `system()` uses: `WEXITSTATUS()` for a
+    /// normal exit, or `WTERMSIG() + 256` for death by signal (plus another `256` if the
+    /// process also dumped core). This differs from `code`'s shell `128 + signal` convention.
+    public var awkSystemStatus : Int32 {
+      if WIFEXITED(rawStatus) { return WEXITSTATUS(rawStatus) }
+      if WIFSIGNALED(rawStatus) {
+        var s = WTERMSIG(rawStatus) + 256
+        if rawStatus & 0o200 != 0 { s += 256 }  // WCOREDUMP
+        return s
+      }
+      return rawStatus
+    }
   }
 
   /// The PID of the spawned child process (0 before launch).
@@ -770,7 +788,7 @@ public actor DarwinProcess {
     awaitingValue = true
 
 
-    async let status: Int32 = waitForExit(pid: pid)
+    async let rawStatus: Int32 = waitForExit(pid: pid)
     async let _ = feederTask?.value
 
     try await readerTask?.value
@@ -783,7 +801,12 @@ public actor DarwinProcess {
       stderrOutput = ""
     }
 
-    let res = try await Output(code: status, data: stdout, error: stderrOutput)
+    let status = try await rawStatus
+    let code: Int32 =
+      if WIFEXITED(status) { WEXITSTATUS(status) }
+      else if WIFSIGNALED(status) { 128 + WTERMSIG(status) }
+      else { status }
+    let res = Output(code: code, rawStatus: status, data: stdout, error: stderrOutput)
 
     // Close read ends after drain
     try? stdoutR?.close()
@@ -794,12 +817,12 @@ public actor DarwinProcess {
 
   // MARK: - Helpers
 
-  /// Waits for the process with `pid` to exit and returns its normalised exit code.
-  ///
-  /// Signal-terminated processes return `128 + signo`.
+  /// Waits for the process with `pid` to exit and returns its raw `waitpid(2)` status word,
+  /// undecoded. Callers decode it via `WIFEXITED`/`WEXITSTATUS`/`WIFSIGNALED`/`WTERMSIG`, or
+  /// use `Output.code` / `Output.awkSystemStatus` for two common conventions.
   ///
   /// - Parameter pid: The child PID to wait for.
-  /// - Returns: The exit code.
+  /// - Returns: The raw status word.
   /// - Throws: ``POSIXErrno`` if `waitpid(2)` fails.
   private func waitForExit(pid: pid_t) async throws -> Int32 {
     try await Task.detached {
@@ -813,8 +836,6 @@ public actor DarwinProcess {
         break
       }
 
-      if WIFEXITED(status) { return WEXITSTATUS(status) }
-      if WIFSIGNALED(status) { return 128 + WTERMSIG(status) }
       return status
     }.value
   }
