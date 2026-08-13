@@ -164,18 +164,6 @@ public actor DarwinProcess {
     /// The standard output decoded as a UTF-8 string.
     public var string : String { String(decoding: data, as: UTF8.self) }
 
-    /// The exit status using the convention awk's `system()` uses: `WEXITSTATUS()` for a
-    /// normal exit, or `WTERMSIG() + 256` for death by signal (plus another `256` if the
-    /// process also dumped core). This differs from `code`'s shell `128 + signal` convention.
-    public var awkSystemStatus : Int32 {
-      if WIFEXITED(rawStatus) { return WEXITSTATUS(rawStatus) }
-      if WIFSIGNALED(rawStatus) {
-        var s = WTERMSIG(rawStatus) + 256
-        if rawStatus & 0o200 != 0 { s += 256 }  // WCOREDUMP
-        return s
-      }
-      return rawStatus
-    }
   }
 
   /// The PID of the spawned child process (0 before launch).
