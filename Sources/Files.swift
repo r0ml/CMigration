@@ -1004,7 +1004,7 @@ public extension FilePath {
   ///
   /// - Returns: The file contents as a `String`.
   /// - Throws: Any error from ``readAllBytes()``.
-  func readAsString<C : Unicode.Encoding>(_ encoding: C.Type = UTF8.self) throws -> String {
+  func readAsString<C : Unicode.Encoding>(encoding: C.Type = UTF8.self) throws -> String {
     let k = try readAllBytes()
     switch encoding {
       case is ISOLatin1.Type:
