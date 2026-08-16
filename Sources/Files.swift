@@ -93,7 +93,7 @@ extension FileDescriptor {
   /// - Parameter forUpdating: The file path to open.
   /// - Throws: `Errno` if the file cannot be opened.
   public init(forUpdating: String) throws {
-    self = try Self.open(forUpdating, .readWrite)
+    self = try Self.open(forUpdating, .readWrite, options: [.create], permissions: [t.ownerReadWrite])
   }
 
 
