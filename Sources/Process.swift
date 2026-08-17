@@ -127,13 +127,6 @@ extension FilePath : Arguable {
 }
 
 
-extension FileDescriptor {
-  /// Sets the close-on-exec flag (`FD_CLOEXEC`) on this file descriptor.
-  func setCloexec() {
-    let flags = Darwin.fcntl(self.rawValue, F_GETFD)
-    _ = fcntl(self.rawValue, F_SETFD, flags | FD_CLOEXEC)
-  }
-}
 
 /// An actor that wraps `posix_spawn(2)` to launch and manage a child process.
 ///
@@ -908,76 +901,3 @@ public func execvp(_ x : String, _ a : [String]) -> POSIXErrno {
   return POSIXErrno()
 }
 
-public extension FileDescriptor {
-  /// Reads whatever bytes are currently available on the file descriptor without blocking.
-  ///
-  /// Returns an empty array if no bytes are available (`EAGAIN`/`EWOULDBLOCK`), or at
-  /// end-of-file.
-  ///
-  /// - Returns: All bytes currently available.
-  /// - Throws: `Errno` for any error other than `EAGAIN`/`EWOULDBLOCK`.
-  func readAvailableBytes() throws(Errno) -> [UInt8] {
-    var result: [UInt8] = []
-    var buffer = [UInt8](repeating: 0, count: 4096)
-
-    while true {
-      do {
-        let count = try buffer.withUnsafeMutableBytes { rawBuffer in
-          try self.read(into: rawBuffer)
-        }
-        if count == 0 {
-          // EOF
-          break
-        }
-        result.append(contentsOf: buffer.prefix(count))
-      } catch let error as Errno {
-        if error == .wouldBlock {
-          // No more data currently available
-          break
-        }
-        throw error
-      } catch {
-        throw Errno.ioError
-      }
-    }
-    return result
-  }
-
-  /// Blocks the current thread until at least one byte is available to read on this descriptor.
-  ///
-  /// Uses `poll(2)` with an infinite timeout and retries on `EINTR`.
-  ///
-  /// - Throws: `Errno` if `poll` returns an error.
-  func waitUntilReadable() throws(Errno) {
-    var pfd = pollfd(
-      fd: Int32(self.rawValue),
-      events: Int16(POLLIN),
-      revents: 0
-    )
-
-    while true {
-      let rc = poll(&pfd, 1, -1)   // -1 = wait forever
-      if rc > 0 {
-        return
-      }
-
-      if rc == -1 {
-        if errno == EINTR {
-          continue
-        }
-        throw Errno(rawValue: errno)
-      }
-    }
-  }
-
-  /// Sets the `O_NONBLOCK` flag on this file descriptor.
-  ///
-  /// - Throws: `Errno` if `fcntl(F_SETFL)` fails.
-  func makeNonBlocking() throws(Errno) {
-    let flags = fcntl(self.rawValue, F_GETFL)
-    guard flags >= 0 else { throw Errno(rawValue: errno) }
-    guard fcntl(self.rawValue, F_SETFL, flags | O_NONBLOCK) >= 0 else {
-      throw Errno(rawValue: errno)
-    }
-  }
-}

@@ -161,15 +161,18 @@ public struct FileSystemMetadata {
     fssubtype = UInt(sfs.f_fssubtype)
 
     fstypename = withUnsafeBytes(of: sfs.f_fstypename) {jj in
-      return String(String(decoding: jj, as: UTF8.self).prefix { $0 != "\0" })
+      let k = Array(jj.bindMemory(to: CChar.self))
+      return String(String(platformString: k).prefix { $0 != "\0" })
     }
 
     mntonname = withUnsafeBytes(of: sfs.f_mntonname) {jj in
-      return String(String(decoding: jj, as: UTF8.self).prefix { $0 != "\0" })
+      let k = Array(jj.bindMemory(to: CChar.self))
+      return String(String(platformString: k).prefix { $0 != "\0" })
     }
 
     mntfromname = withUnsafeBytes(of: sfs.f_mntfromname) {jj in
-      return String(String(decoding: jj, as: UTF8.self).prefix { $0 != "\0" })
+      let k = Array(jj.bindMemory(to: CChar.self))
+      return String(String(platformString: k).prefix { $0 != "\0" })
     }
   }
 }

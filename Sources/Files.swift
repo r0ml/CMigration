@@ -33,72 +33,6 @@ import Darwin
 @_exported import errno_h
 
 
-extension FilePath {
-  /// Returns `true` if the path refers to a regular file (not following symlinks).
-  ///
-  /// - Throws: ``POSIXErrno`` if `lstat(2)` fails.
-  public func isRegularFile() throws(POSIXErrno) -> Bool {
-    let statBuf = try FileMetadata(for: self, followSymlinks: false)
-    return statBuf.filetype == .regular
-  }
-
-  /// Renames this path to `to`.
-  ///
-  /// - Parameter to: The destination path.
-  /// - Throws: ``POSIXErrno`` if `rename(2)` fails.
-  public func rename(to: FilePath) throws(POSIXErrno) {
-    let k = Darwin.rename(self.string, to.string)
-    if k != 0 {
-      throw POSIXErrno(k, fn: "rename")
-    }
-  }
-}
-
-extension FileDescriptor {
-  /// Returns `true` if this file descriptor refers to a regular file.
-  public var isRegularFile : Bool {
-    var sbp = Darwin.stat()
-    if fstat(self.rawValue, &sbp) != 0 {
-      return false
-    }
-    return (sbp.st_mode & S_IFMT) == S_IFREG
-  }
-}
-
-
-extension FileDescriptor {
-  /// An `AsyncSequence` that yields one byte at a time from this file descriptor.
-  public var bytes : AsyncByteStream { get  { AsyncByteStream(fd: self) } }
-  /// An `AsyncSequence` that yields one decoded `Character` at a time from this file descriptor.
-  public var characters : AsyncCharacterReader { get { AsyncCharacterReader(fd: self) } }
-
-  /// Opens `forReading` for reading.
-  ///
-  /// - Parameter forReading: The file path to open.
-  /// - Throws: `Errno` if the file cannot be opened.
-  public init(forReading: String) throws {
-    self = try Self.open(forReading, .readOnly)
-  }
-
-  /// Opens `forWriting` for writing.
-  ///
-  /// - Parameter forWriting: The file path to open.
-  /// - Throws: `Errno` if the file cannot be opened.
-  public init(forWriting: String) throws {
-    self = try Self.open(forWriting, .writeOnly, options: [.create, .truncate], permissions: [.ownerReadWrite])
-  }
-
-  /// Opens `forUpdating` for both reading and writing.
-  ///
-  /// - Parameter forUpdating: The file path to open.
-  /// - Throws: `Errno` if the file cannot be opened.
-  public init(forUpdating: String) throws {
-    self = try Self.open(forUpdating, .readWrite, options: [.create], permissions: [.ownerReadWrite])
-  }
-
-
-}
-
 /// An `AsyncSequence` that yields raw bytes from an open `FileDescriptor`.
 ///
 /// Use `fd.bytes` to obtain one, or iterate it directly.  Obtain a line-based view
@@ -230,53 +164,6 @@ public struct AsyncLineReader: AsyncSequence {
   }
 }
 
-public extension FilePath {
-  /// Returns `true` if the process has execute permission for this path.
-  var isExecutable : Bool {
-    return self.string.withPlatformString { cPath in
-      access(cPath, X_OK) == 0
-    }
-  }
-}
-
-
-extension FileDescriptor {
-  /// Reads up to `count` bytes from this descriptor.
-  ///
-  /// - Parameter count: Maximum number of bytes to read.
-  /// - Returns: The bytes actually read (may be fewer than `count`).
-  /// - Throws: `Errno` on I/O error.
-  public func readUpToCount(_ count: Int) throws -> [UInt8] {
-    var buffer = [UInt8](repeating: 0, count: count)
-
-    let bytesRead = try buffer.withUnsafeMutableBytes {
-      try self.read(into: $0)
-    }
-
-    return Array(buffer.prefix(bytesRead))
-  }
-
-  /// Writes all elements of `data` to this descriptor.
-  ///
-  /// - Parameter data: The sequence of bytes to write.
-  /// - Returns: The number of bytes written.
-  /// - Throws: `Errno` on I/O error.
-  @discardableResult public func write<S:Sequence>(_ data : S) throws -> Int where S.Element == UInt8  {
-    try self.writeAll(data)
-  }
-}
-
-
-
-extension FileDescriptor: @retroactive TextOutputStream {
-  /// Writes `string` encoded as UTF-8 to this file descriptor.
-  ///
-  /// Errors are silently discarded so this conforms to `TextOutputStream`.
-  public func write(_ string: String) {
-    let _ = try? self.writeAll( Array(string.utf8) )
-  }
-}
-
 
 /// An `AsyncSequence` that yields `Character` values decoded from an open `FileDescriptor`.
 ///
@@ -295,7 +182,7 @@ public struct AsyncCharacterReader: AsyncSequence {
   /// - Parameters:
   ///   - fd: The descriptor to read from.
   ///   - bufferSize: The read buffer size. Defaults to 4096.
-  public init(fd: FileDescriptor, bufferSize: Int = 4096) {
+  public init(fd: FileDescriptor, bufferSize: Int = 4096, encoding: any Unicode.Encoding.Type = UTF8.self) {
     self.fd = fd
     self.bufferSize = bufferSize
   }
@@ -304,13 +191,15 @@ public struct AsyncCharacterReader: AsyncSequence {
   public struct AsyncIterator: AsyncIteratorProtocol {
     let fd: FileDescriptor
     let bufferSize: Int
-
+    let encoding : any Unicode.Encoding.Type
+    
     var byteBuffer = [UInt8]()
     var characterIterator: String.Iterator?
 
-    init(fd: FileDescriptor, bufferSize: Int) {
+    init(fd: FileDescriptor, bufferSize: Int, encoding: any Unicode.Encoding.Type = UTF8.self) {
       self.fd = fd
       self.bufferSize = bufferSize
+      self.encoding = encoding
     }
 
     /// Returns the next decoded `Character`, or `nil` at end-of-file.
@@ -337,9 +226,20 @@ public struct AsyncCharacterReader: AsyncSequence {
       var decodedCount = byteBuffer.count
       while decodedCount > 0 {
         let slice = byteBuffer.prefix(decodedCount)
-        let decoded = String(decoding: slice, as: UTF8.self)
-        let reencoded = Array(decoded.utf8)
-
+        var decoded : String
+        var reencoded : [UInt8]
+        
+        switch encoding {
+          case is ISOLatin1.Type:
+            decoded = String(decoding: slice, as: ISOLatin1.self)
+            reencoded = Array(slice)
+          case is UTF8.Type:
+            fallthrough
+          default:
+            decoded = String(decoding: slice, as: UTF8.self)
+            reencoded = Array(decoded.utf8)
+        }
+        
         if reencoded.count == decodedCount {
           characterIterator = decoded.makeIterator()
           byteBuffer.removeFirst(decodedCount)
@@ -349,7 +249,7 @@ public struct AsyncCharacterReader: AsyncSequence {
         decodedCount -= 1
       }
 
-      // Wait for more bytes to complete the UTF-8 sequence
+      // Wait for more bytes to complete the encoding sequence
       return try await next()
     }
   }
@@ -361,7 +261,7 @@ public struct AsyncCharacterReader: AsyncSequence {
 }
 
 
-
+/*
 /// Reads the entire contents of the file at `path` as a UTF-8 string.
 ///
 /// - Parameter path: The filesystem path to read.
@@ -384,30 +284,7 @@ public func readFileAsString(at path: String) throws -> String {
 
   return String(decoding: content, as: UTF8.self)
 }
-
-public extension FileDescriptor {
-  /// Reads all bytes from this file descriptor until EOF.
-  ///
-  /// - Parameter chunkSize: The size of each read operation. Defaults to 4096 bytes.
-  /// - Returns: A `[UInt8]` containing the full contents.
-  /// - Throws: `Errno` on I/O error.
-  func readToEnd(chunkSize: Int = 4096) throws -> [UInt8] {
-    var buffer = [UInt8](repeating: 0, count: chunkSize)
-    var result = [UInt8]()
-
-    while true {
-      let bytesRead = try buffer.withUnsafeMutableBytes {
-        try self.read(into: $0)
-      }
-      if bytesRead == 0 {
-        break // EOF
-      }
-      result.append(contentsOf: buffer[..<bytesRead])
-    }
-
-    return result
-  }
-}
+*/
 
 
 /// A typed POSIX error that captures an `errno` code, an optional function name, and an optional reason string.
@@ -784,13 +661,13 @@ public func searchPath(for filename: String) -> String? {
 /// - Returns: The link target as a string.
 /// - Throws: ``POSIXErrno`` if `readlink(2)` fails.
 public func readlink(_ s : String) throws(POSIXErrno) -> String {
-  var path = Array<UInt8>(repeating: 0, count: MAXPATHLEN+1)
+  var path = Array<Int8>(repeating: 0, count: MAXPATHLEN+1)
   let lnklen = Darwin.readlink(s, &path, MAXPATHLEN)
   if lnklen == -1 {
     throw POSIXErrno(errno)
   }
   path[lnklen] = 0
-  let r = String(decoding: path[..<Int(lnklen)], as: UTF8.self)
+  let r = String(platformString: Array(path[..<Int(lnklen)]))
   return r
 }
 
@@ -843,452 +720,6 @@ enum StringEncodingError : Error {
 
 // =========================================================
 
-public extension FilePath {
-  /// Lists the names of all entries in this directory (excluding `.` and `..`).
-  ///
-  /// - Returns: An array of entry name strings.
-  /// - Throws: ``POSIXErrno`` if `opendir(3)` or `readdir(3)` fails.
-  func listDirectory() throws(POSIXErrno) -> [String] {
-    let dirString = self.string
-
-    guard let dp = opendir(dirString) else {
-      throw POSIXErrno(fn: "opendir")
-    }
-    defer { closedir(dp) }
-
-    var results: [String] = []
-    results.reserveCapacity(64)
-
-    errno = 0
-    while let ent = readdir(dp) {
-      let name = withUnsafePointer(to: &ent.pointee.d_name) {
-        $0.withMemoryRebound(to: CChar.self, capacity: Int(NAME_MAX) + 1) {
-          String(cString: $0)
-        }
-      }
-
-      if name == "." || name == ".." {
-        continue
-      }
-
-      results.append(name)
-      errno = 0
-    }
-
-    if errno != 0 {
-      throw POSIXErrno(fn: "readdir")
-    }
-
-    return results
-  }
-}
-
-
-public extension FileDescriptor {
-  /// Lists the names of all entries in the directory represented by this descriptor.
-  ///
-  /// - Returns: An array of entry name strings (including `.` and `..`).
-  /// - Throws: ``POSIXErrno`` if `fdopendir(3)` or `readdir(3)` fails.
-  func listDirectory() throws(POSIXErrno) -> [String] {
-    guard let dp = fdopendir(rawValue) else {
-      throw POSIXErrno(fn: "fdopendir")
-    }
-    defer { closedir(dp) }
-
-    var results: [String] = []
-    results.reserveCapacity(64)
-
-    errno = 0
-    while let ent = readdir(dp) {
-      let name = withUnsafePointer(to: &ent.pointee.d_name) {
-        $0.withMemoryRebound(to: CChar.self, capacity: Int(NAME_MAX) + 1) {
-          String(cString: $0)
-        }
-      }
-
-      results.append(name)
-      errno = 0
-    }
-
-    if errno != 0 {
-      throw POSIXErrno(fn: "readdir")
-    }
-
-    return results
-  }
-}
-
-// =============================================
-
-public extension FileDescriptor {
-  /// Reads all bytes from this descriptor and decodes them as a UTF-8 string.
-  ///
-  /// - Returns: The full contents as a `String`.
-  /// - Throws: Any error from ``readAllBytes()``.
-  func readAsString<C : Unicode.Encoding>(encoding: C.Type = UTF8.self) throws -> String {
-    let k = try readAllBytes()
-    switch encoding {
-      case is ISOLatin1.Type:
-        // FIXME: should it be validating?
-        return String(decoding: k, as: ISOLatin1.self)
-      case is UTF8.Type:
-        fallthrough
-      default:
-        return String.init(decoding: k, as: UTF8.self)
-    }
-  }
-
-  /// Reads all bytes from this already-open descriptor (streaming; mmap does not apply).
-  ///
-  /// Retries automatically on `EINTR` and respects `Task.isCancelled`.
-  ///
-  /// - Returns: A `[UInt8]` with the complete contents.
-  /// - Throws: `Errno` on I/O error, or `CancellationError` if the task is cancelled.
-  func readAllBytes() throws -> [UInt8] {
-    var out: [UInt8] = []
-    out.reserveCapacity(8192)
-
-    var buf = [UInt8](repeating: 0, count: 64 * 1024)
-
-    while true {
-      if Task.isCancelled { throw CancellationError() }
-
-      let n: Int
-      do {
-        n = try buf.withUnsafeMutableBytes { rawBuf in
-          try self.read(into: rawBuf)
-        }
-      } catch let e as Errno {
-        if e == .interrupted { continue }   // EINTR
-        throw e
-      }
-
-      if n == 0 { break } // EOF
-      out.append(contentsOf: buf[0..<n])
-    }
-
-    return out
-  }
-
-  /// Writes all bytes in `bytes` to this descriptor, retrying on `EINTR`.
-  ///
-  /// - Parameter bytes: The bytes to write.
-  /// - Throws: `Errno` on I/O error, or ``POSIXErrno`` if the write returns zero unexpectedly.
-  func writeAllBytes(_ bytes: [UInt8]) throws {
-    var written = 0
-    while written < bytes.count {
-      let n: Int
-      do {
-        n = try bytes.withUnsafeBytes { rawBuf in
-          let base = rawBuf.bindMemory(to: UInt8.self).baseAddress!
-          let ptr = base.advanced(by: written)
-          let remaining = bytes.count - written
-          return try write(UnsafeRawBufferPointer(start: ptr, count: remaining))
-        }
-      } catch let e as Errno {
-        if e == .interrupted { continue }
-        throw e
-      }
-      if n == 0 {
-        throw POSIXErrno(EPIPE, fn: "write")
-      }
-      written += n
-    }
-  }
-
-
-}
-
-public extension FilePath {
-  /// Reads all bytes of this file and decodes them as a UTF-8 string.
-  ///
-  /// - Returns: The file contents as a `String`.
-  /// - Throws: Any error from ``readAllBytes()``.
-  func readAsString<C : Unicode.Encoding>(encoding: C.Type = UTF8.self) throws -> String {
-    let k = try readAllBytes()
-    switch encoding {
-      case is ISOLatin1.Type:
-        return String(decoding: k, as: ISOLatin1.self)
-      case is UTF8.Type:
-        fallthrough
-      default:
-      return String(decoding: k, as: UTF8.self)
-    }
-  }
-
-  /// Reads all bytes of this file.
-  ///
-  /// Uses `mmap(2)` for regular files (fast path) and falls back to a streaming
-  /// read for pipes, devices, and other non-regular files.
-  ///
-  /// - Returns: A `[UInt8]` containing the full file contents.
-  /// - Throws: Any `Errno` or ``POSIXErrno`` from the underlying calls.
-  func readAllBytes() throws -> [UInt8] {
-    if let mm = try? mmapRegularFile() {
-      return mm
-    }
-
-    let fd = try FileDescriptor.open(self, .readOnly)
-    defer { try? fd.close() }
-    return try fd.readAllBytes()
-  }
-
-  // MARK: - mmap fast-path (regular files only)
-
-  /// Returns the file contents via `mmap(2)`, copying them into a `[UInt8]`.
-  ///
-  /// Throws when the path does not refer to a regular file.
-  private func mmapRegularFile() throws -> [UInt8] {
-    try self.withPlatformString { cPath in
-      let fd = Darwin.open(cPath, O_RDONLY)
-      if fd < 0 { throw POSIXErrno(fn: "open") }
-      defer { _ = Darwin.close(fd) }
-
-      var st = Darwin.stat()
-      if fstat(fd, &st) != 0 { throw POSIXErrno(fn: "fstat") }
-
-      if (st.st_mode & S_IFMT) != S_IFREG {
-        throw POSIXErrno(EINVAL, fn: "mmap", reason: "not a regular file")
-      }
-
-      if st.st_size == 0 { return [] }
-
-      let length = Int(st.st_size)
-      let mapped = mmap(nil, length, PROT_READ, MAP_PRIVATE, fd, 0)
-      if mapped == MAP_FAILED { throw POSIXErrno(fn: "mmap") }
-      defer { _ = munmap(mapped, length) }
-
-      let ptr = mapped!.assumingMemoryBound(to: UInt8.self)
-      return Array(UnsafeBufferPointer(start: ptr, count: length))
-    }
-  }
-}
-
-
-public extension FileDescriptor {
-  /// Sets the POSIX permission bits on this file descriptor.
-  ///
-  /// - Parameter p: The desired permissions.
-  /// - Throws: ``POSIXErrno`` if `fchmod(2)` fails.
-  func setPermissions(_ p : FilePermissions) throws(POSIXErrno) {
-    if 0 != fchmod(self.rawValue, p.rawValue) {
-      throw POSIXErrno(fn: "setPermissions")
-    }
-  }
-
-  /// Sets the access and modification timestamps of this file.
-  ///
-  /// Pass `nil` for either parameter to leave that timestamp unchanged.
-  ///
-  /// - Parameters:
-  ///   - modified: The new modification time, or `nil` to omit.
-  ///   - accessed: The new access time, or `nil` to omit.
-  /// - Throws: ``POSIXErrno`` if `futimens(2)` fails.
-  func setTimes(modified: DateTime? = nil, accessed: DateTime? = nil) throws(POSIXErrno) {
-    let omit = timespec(tv_sec: 0, tv_nsec: Int(Darwin.UTIME_OMIT))
-    var times : (timespec, timespec) = ( modified?.timespec ?? omit, accessed?.timespec ?? omit)
-    if futimens( self.rawValue, &times.0) != 0 {
-      throw POSIXErrno(fn: "setTimes")
-    }
-  }
-}
-
-public extension FilePath {
-  /// Sets the POSIX permission bits on this path.
-  ///
-  /// - Parameters:
-  ///   - p: The desired permissions.
-  ///   - followSymlinks: When `false` (default), `lchmod(2)` is used so the symlink
-  ///     itself is changed rather than its target.
-  /// - Throws: ``POSIXErrno`` if the chmod call fails.
-  func setPermissions(_ p : FilePermissions, followSymlinks: Bool = false) throws(POSIXErrno) {
-    let f = followSymlinks ? chmod : lchmod
-    if 0 != f(self.string, p.rawValue) {
-      throw POSIXErrno(fn: "setPermissions")
-    }
-  }
-
-  /// Creates a symbolic link at this path pointing to `target`.
-  ///
-  /// - Parameter target: The path the symlink should point to.
-  /// - Throws: ``POSIXErrno`` if `symlink(2)` fails.
-  func createSymbolicLink(to target: FilePath) throws(POSIXErrno) {
-    if 0 != symlink(target.string, self.string) {
-      throw POSIXErrno(fn: "createSymbolicLink")
-    }
-  }
-
-  /// Creates a hard link at this path pointing to `target`.
-  ///
-  /// Uses `linkat(2)` with `AT_SYMLINK_NOFOLLOW_ANY` so that a symlink as the final
-  /// component of `target` is linked directly (not followed).
-  ///
-  /// - Parameter target: The existing file to link to.
-  /// - Throws: ``POSIXErrno`` if `linkat(2)` fails.
-  func createHardLink(to target: FilePath) throws(POSIXErrno) {
-    do {
-      let fds = try FileDescriptor.open(self.removingLastComponent().string, .readOnly, options: .directory)
-      let fdt = try FileDescriptor.open(target.removingLastComponent().string, .readOnly, options: .directory)
-      let tc = target.lastComponent
-      let fc = self.lastComponent
-      if 0 != Darwin.linkat(fdt.rawValue, tc?.string ?? "", fds.rawValue, fc?.string ?? "", Darwin.AT_SYMLINK_NOFOLLOW_ANY) {
-        throw POSIXErrno(fn: "linkat")
-      }
-    } catch(let e as Errno) {
-      throw POSIXErrno(e.rawValue, fn: "linkat")
-    } catch(let e) {
-      throw POSIXErrno(errno, fn: "linkat")
-    }
-  }
-
-  /// Creates this path as a directory, creating intermediate components as needed.
-  ///
-  /// - Parameter pr: The permissions to apply to each created directory.
-  /// - Throws: ``POSIXErrno`` if any `mkdir(2)` call fails.
-  func createDirectory(_ pr : FilePermissions) throws(POSIXErrno) {
-    var d = FilePath((self.root ?? FilePath.Root(".")).string)
-    for p in self.components {
-      d.append(p)
-      if (try? FileMetadata(for: d))?.filetype == .directory { continue }
-      if 0 != mkdir(d.string, pr.rawValue) {
-        throw POSIXErrno(fn: "createDirectory")
-      }
-    }
-  }
-
-  /// Sets the access and modification timestamps of the file at this path.
-  ///
-  /// Passes `nil` for either parameter to leave that timestamp unchanged.  The symlink
-  /// itself is updated (`AT_SYMLINK_NOFOLLOW`) rather than its target.
-  ///
-  /// - Parameters:
-  ///   - modified: The new modification time, or `nil` to omit.
-  ///   - accessed: The new access time, or `nil` to omit.
-  /// - Throws: ``POSIXErrno`` if `utimensat(2)` fails.
-  func setTimes(modified: DateTime? = nil, accessed: DateTime? = nil) throws(POSIXErrno) {
-    let omit = timespec(tv_sec: 0, tv_nsec: Int(Darwin.UTIME_OMIT))
-    var times : (timespec, timespec) = ( modified?.timespec ?? omit, accessed?.timespec ?? omit)
-    if utimensat(AT_FDCWD, self.string, &times.0, AT_SYMLINK_NOFOLLOW ) != 0 {
-      throw POSIXErrno(fn: "setTimes")
-    }
-  }
-
-  /// Resolves this path to its canonical absolute path by calling `realpath(3)`.
-  ///
-  /// - Returns: The resolved canonical ``FilePath``.
-  /// - Throws: ``POSIXErrno`` if `realpath(3)` fails.
-  func realpath() throws(POSIXErrno) -> FilePath {
-    let (r,e) : (String?, POSIXErrno?) = withUnsafeTemporaryAllocation(byteCount: Int(PATH_MAX), alignment: 1) {
-      if let x = Darwin.realpath(self.string, $0.baseAddress) {
-        return (String(cString: x), nil)
-      }
-      return (nil, POSIXErrno(fn: "realpath"))
-    }
-    if let r { return FilePath(r) }
-    else { throw e! }
-  }
-
-}
-
-public extension FilePath {
-  /// Recursively removes this path and all of its contents.
-  ///
-  /// For regular files, symbolic links, and other non-directory types, calls `unlink(2)`.
-  /// For directories, recursively removes children then calls `rmdir(2)`.
-  ///
-  /// - Throws: ``POSIXErrno`` if any removal step fails.
-  func removeTree() throws(POSIXErrno) {
-    guard let st = try? FileMetadata(for: self, followSymlinks: false) else {
-      return
-    }
-    if st.filetype == .directory {
-      let j = try self.listDirectory()
-      for i in j {
-        try self.appending(i).removeTree()
-      }
-      if rmdir(self.string) != 0 {
-        throw POSIXErrno(fn: "rmdir")
-      }
-    } else {
-      if unlink(self.string) != 0 {
-        throw POSIXErrno(fn: "unlink")
-      }
-    }
-  }
-}
-
-
-public extension FilePath {
-  /// The last path component, following the same semantics as POSIX `basename(3)`.
-  ///
-  /// - An empty path returns `"."`.
-  /// - A path of all slashes returns `"/"`.
-  /// - Trailing slashes are stripped before extracting the component.
-  var basename : String {
-    if self.string.isEmpty {
-      return "."
-    }
-
-    var ppath = Substring(self.string)
-
-    while ppath.last == "/" {
-      ppath = ppath.dropLast()
-    }
-
-    if ppath.isEmpty {
-      return "/"
-    }
-
-    var res = Substring("")
-    while !ppath.isEmpty && ppath.last != "/" {
-      res.insert(ppath.last!, at: ppath.startIndex)
-      ppath = ppath.dropLast()
-    }
-
-    return String(res)
-  }
-
-
-  /// The directory portion of this path, following the same semantics as POSIX `dirname(3)`.
-  ///
-  /// Uses `dirname_r(3)` when available; falls back to ``removingLastComponent()``.
-  var dirname : FilePath {
-    withUnsafeTemporaryAllocation(byteCount: MAXPATHLEN+1, alignment: 8) {
-      if let d = Darwin.dirname_r(self.string, $0.baseAddress!) {
-        return FilePath(platformString: d )
-      } else {
-        return self.removingLastComponent()
-      }
-    }
-  }
-
-
-  /// Returns the path of this file relative to `baseDirectory`.
-  ///
-  /// Uses `".."` components to ascend out of the common prefix, then descends
-  /// into the target.  Returns `"."` when the paths are identical.
-  ///
-  /// - Parameter baseDirectory: The directory to which the result should be relative.
-  /// - Returns: A relative path string.
-  func relativeTo(_ baseDirectory: FilePath) -> String {
-    func components(_ path: String) -> [Substring] {
-      path.split(separator: "/", omittingEmptySubsequences: true)
-    }
-
-    let base = components(baseDirectory.string)
-    let target = components(self.string)
-    var common = 0
-    while common < min(base.count, target.count),
-          base[common] == target[common] {
-      common += 1
-    }
-    let up = Array(repeating: "..", count: base.count - common)
-    let down = target[common...].map(String.init)
-    let result = up + down
-    return result.isEmpty ? "." : result.joined(separator: "/")
-  }
-
-}
 
 /// Renames `oldPath` to `newPath` using `rename(2)`.
 ///
