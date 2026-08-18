@@ -217,10 +217,12 @@ public actor DarwinProcess {
     args arguments: any Arguable...,
     env : [String : String] = [:],
     cd : FilePath? = nil,
+    encoding: IEncoding = .utf8,
     output: (FileDescriptor?, FileDescriptor?)? = nil
   ) async throws(POSIXErrno) -> DarwinProcess {
     let p = DarwinProcess()
-    let _ = try await p.launch(executablePath, withStdin: withStdin, args: arguments, env: env, cd: cd, output: output)
+    let _ = try await p.launch(executablePath, withStdin: withStdin, args: arguments, env: env, cd: cd,
+                               encoding: encoding, output: output)
     return p
   }
 
@@ -272,9 +274,11 @@ public actor DarwinProcess {
     args arguments: any Arguable...,
     env : [String : String] = [:],
     cd : FilePath? = nil,
+    encoding: IEncoding = .utf8,
     output: (FileDescriptor?, FileDescriptor?)? = nil
   ) throws(POSIXErrno) -> pid_t {
-    return try launch(executablePath, withStdin: withStdin, args: arguments, env: env, cd: cd, output: output)
+    return try launch(executablePath, withStdin: withStdin, args: arguments, env: env, cd: cd,
+                      encoding: encoding, output: output)
   }
 
   /*
@@ -334,6 +338,7 @@ public actor DarwinProcess {
     args arguments: [any Arguable] = [],
     env : [String : String] = [:],
     cd : FilePath? = nil,
+    encoding: IEncoding = .utf8,
     output: (FileDescriptor?, FileDescriptor?)? = (nil, nil)
   ) throws(POSIXErrno) -> pid_t {
     if launched { fatalError("already launched once") }
@@ -605,7 +610,7 @@ public actor DarwinProcess {
 
     if let se = stderrR {
       errorTask = Task.detached {
-        let res = try se.readAsString()
+        let res = try se.readAsString(encoding: encoding)
         return res
       }
     }
@@ -658,9 +663,11 @@ public actor DarwinProcess {
     args arguments: any Arguable...,
     env : [String : String] = [:],
     cd : FilePath? = nil,
+    encoding: IEncoding = .utf8,
     output: (FileDescriptor?, FileDescriptor?)? = nil
   ) async throws -> Output {
-    return try await run(executablePath, withStdin: withStdin, args: arguments, env: env, cd: cd, output: output)
+    return try await run(executablePath, withStdin: withStdin, args: arguments, env: env, cd: cd,
+                         encoding: encoding, output: output)
   }
 
   /// Launches the process with an array of arguments and immediately awaits the result.
@@ -680,6 +687,7 @@ public actor DarwinProcess {
     args arguments: [any Arguable] = [],
     env : [String : String] = [:],
     cd : FilePath? = nil,
+    encoding: IEncoding = .utf8,
     output: (FileDescriptor?, FileDescriptor?)? = nil
   ) async throws -> Output {
 
@@ -689,6 +697,7 @@ public actor DarwinProcess {
       args: arguments,
       env: env,
       cd: cd,
+      encoding: encoding,
       output: output
     )
 

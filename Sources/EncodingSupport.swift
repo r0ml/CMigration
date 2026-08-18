@@ -49,11 +49,25 @@ public struct IEncoding : Sendable {
   public init?(_ s : String) {
     if let k = iconv_canonicalize(s)  {
       let j = String(platformString: k)
-      if j.isEmpty { return nil }
-      canonical = j
-    } else {
-      return nil
+//      print("j: (\(j)) for \(s)")
+      if !j.isEmpty {
+        canonical = j
+        return
+      }
+//    } else {
+//      print("j was nil for \(s)")
     }
+      
+    // WARNING: not as documented: 
+    // documentation says if already canonical,
+    // return self, but it returns "",
+    // so need an extra check here
+      let j = s.uppercased()
+      if Self.list.keys.contains(j) {
+        canonical = j
+        return
+      }
+    return nil
   }
   
   // a method, so "self" is the encoding
@@ -239,14 +253,15 @@ public struct IEncoding : Sendable {
   }
 }
 
-/*
+
  import Playgrounds
  #Playground {
   // let a = Iconv.list
   let a = IEncoding("Latin1")
-  let b = IEncoding("unicode")
+   let c = IEncoding("ISO-8859-1")
+  let b = IEncoding("UTF8")
 }
- */
+
 
 /*
  # locale -m
