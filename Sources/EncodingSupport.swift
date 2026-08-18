@@ -150,7 +150,7 @@ public struct IEncoding : Sendable {
     return String(decoding: result, as: UTF8.self)
   }
 
-  public func toBytes(_ s : String) throws -> [CChar] {
+  public func toBytes(_ s : String) throws -> [UInt8] {
     guard let cd = iconv_open(canonical, "UTF8") else {
       throw IconvError.openFailed
     }
@@ -235,7 +235,7 @@ public struct IEncoding : Sendable {
       }
     }
 
-    return newbuf.map { CChar(bitPattern: $0) }
+    return newbuf
   }
 }
 
