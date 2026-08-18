@@ -29,6 +29,11 @@ let package = Package(
     .library(name: "CMigration", targets: ["CMigration"]),
     ],
   targets: [
-    .target(name: "CMigration"),
+    .target(
+      name: "CMigration",
+      linkerSettings: [
+        .linkedLibrary("iconv")
+      ]
+    ),
   ]
 )
