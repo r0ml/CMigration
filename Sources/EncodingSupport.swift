@@ -41,6 +41,7 @@ public struct IEncoding : Sendable {
   }
   
   public static let utf8 : IEncoding = .init("UTF8")!
+  public static let latin1 : IEncoding = .init("LATIN1")!
   public static var list : [String:[String]] {
     return getIconvList()
   }
