@@ -388,6 +388,7 @@ extension Environment {
   }
 }
 
+/*
 import Playgrounds
 #Playground {
   let beforeLocale = Environment.getStringEncoding()
@@ -417,3 +418,5 @@ import Playgrounds
   debugPrint("%8d %c %s".cFormat(123, UInt(44), "abcde"))
 
 }
+*/
+
