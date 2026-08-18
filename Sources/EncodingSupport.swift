@@ -39,7 +39,7 @@ public struct IEncoding : Sendable {
     return result.value
   }
   
-  public static let utf8 : Self = .init("UTF-8")!
+  public static let utf8 : IEncoding = .init("UTF-8")!
   public static var list : [String:[String]] {
     return getIconvList()
   }
@@ -59,7 +59,7 @@ public struct IEncoding : Sendable {
 // a method, so "self" is the encoding
   // argument is the byte sequence
   // result is the String
-  func toString(
+  public func toString(
       _ input: [UInt8],
   ) throws -> String {
       guard let cd = iconv_open("UTF-8", canonical) else {
