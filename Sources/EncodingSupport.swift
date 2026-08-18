@@ -269,8 +269,8 @@ public struct IEncoding : Sendable {
     }
     
     let codeset = canonical
-    let current = pr
-    
+    var current = pr
+    if current == "C" { current = "en_US" }
     let locale: String
     if let dot = current.firstIndex(of: ".") {
       // Replace codeset, preserving @modifier if present.

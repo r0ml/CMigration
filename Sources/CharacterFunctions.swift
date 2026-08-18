@@ -373,6 +373,18 @@ func firstInvalidUTF8Index(in bytes: [UInt8]) -> Int? {
 ///   `nil` for all other codeset names.
 extension Environment {
   public static func getStringEncoding() -> IEncoding { // any Unicode.Encoding.Type)? {
+    // nl_langinfo(CODESET) only reflects reality once setlocale() has succeeded, and
+    // setlocale() is picky about locale-name formatting (e.g. it accepts "en_US.ISO8859-1"
+    // but not the iconv-canonical "C.ISO-8859-1" this process may have been launched with).
+    // When that happens the codeset silently stays at the OS default (ASCII) even though
+    // LC_ALL/LC_CTYPE/LANG clearly requested something else. Parse those env vars directly
+    // via IEncoding's more lenient iconv-based name matching before falling back to
+    // nl_langinfo, so a requested encoding that setlocale rejected isn't silently ignored.
+    for varName in ["LC_ALL", "LC_CTYPE", "LANG"] {
+      guard let v = Environment[varName], !v.isEmpty else { continue }
+      let codesetPart = v.firstIndex(of: ".").map { String(v[v.index(after: $0)...]) } ?? v
+      if let enc = IEncoding(codesetPart) { return enc }
+    }
     let codeset = String(cString: nl_langinfo(CODESET))
     return IEncoding(codeset) ?? .utf8
     /*
