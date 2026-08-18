@@ -30,7 +30,7 @@ final class IconvListResult {
     var value: [String: [String]] = [:]
 }
 
-public struct IEncoding {
+public struct IEncoding : Sendable {
   public static func getIconvList() -> [String:[String]] {
     
     let result = IconvListResult()
@@ -39,6 +39,7 @@ public struct IEncoding {
     return result.value
   }
   
+  public static let utf8 : Self = .init("UTF-8")!
   public static var list : [String:[String]] {
     return getIconvList()
   }
