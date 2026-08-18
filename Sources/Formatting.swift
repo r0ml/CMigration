@@ -83,7 +83,21 @@ public extension String {
         vsnprintf(ptr.baseAddress, bufferSize, self, vaPtr)
       }
       let pp = UnsafeBufferPointer(start: ptr.baseAddress!, count: Int(n) )
-      return String(platformString: Array(pp).map { CChar($0) } ) // decoding: pp, as: ISOLatin1.self)
+//      return String(platformString: Array(pp).map { CChar($0) } ) // decoding: pp, as: ISOLatin1.self)
+      let j = Environment.getStringEncoding()
+      if let res = try? j.toString(Array(pp)) {
+        return res
+      } else {
+        fatalError("failed to convert \(pp)")
+      }
     }
   }
 }
+
+/*
+import Playgrounds
+#Playground {
+  let j : String = ""
+  let k = "%s %d %s".cFormat("", 123, j)
+}
+*/
