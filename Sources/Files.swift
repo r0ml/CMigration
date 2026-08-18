@@ -51,7 +51,7 @@ public struct AsyncByteStream: AsyncSequence {
   /// - Parameters:
   ///   - withEOL: When `true`, the newline character is included in each line. Defaults to `false`.
   ///   - encoding: The string encoding to apply. Defaults to `UTF8.self`.
-  public func lines(_ withEOL : Bool = false, encoding: any Unicode.Encoding.Type = UTF8.self) -> AsyncLineReader {
+  public func lines(_ withEOL : Bool = false, encoding: IEncoding = .utf8) -> AsyncLineReader {
     return AsyncLineReader(byteStream: self, retEOL:  withEOL, encoding: encoding)
   }
 
@@ -101,7 +101,7 @@ public struct AsyncLineReader: AsyncSequence {
   public typealias Element = String
   let byteStream: AsyncByteStream
   var retEOL = false
-  var encoding : any Unicode.Encoding.Type = UTF8.self
+  var encoding : IEncoding = .utf8 //  any Unicode.Encoding.Type = UTF8.self
 
   /// Returns a copy of this reader configured to include the trailing newline in each line.
   public mutating func withEOL() -> Self {
@@ -114,7 +114,7 @@ public struct AsyncLineReader: AsyncSequence {
     var byteIterator: AsyncByteStream.AsyncIterator
     var buffer = [UInt8]()
     var retEOL = false
-    var encoding : any Unicode.Encoding.Type = UTF8.self
+    var encoding : IEncoding = .utf8
 
     /// Returns the next decoded line, or `nil` at end-of-file.
     ///
@@ -133,7 +133,9 @@ public struct AsyncLineReader: AsyncSequence {
       }
 
       guard go else { return nil }
-      var line : String?
+      var line = try encoding.toString(buffer)
+      /*
+      
       switch encoding {
         case is ISOLatin1.Type:
           line = String(validating: buffer, as: ISOLatin1.self )
@@ -148,11 +150,14 @@ public struct AsyncLineReader: AsyncSequence {
         default:
           line = String(validating: buffer, as: UTF8.self )
       }
+       */
+      /*
       guard let line else {
         line = String(validating: buffer, as: ISOLatin1.self )
         buffer.removeAll()
         return line
       }
+       */
       buffer.removeAll()
       return line
     }
@@ -191,12 +196,12 @@ public struct AsyncCharacterReader: AsyncSequence {
   public struct AsyncIterator: AsyncIteratorProtocol {
     let fd: FileDescriptor
     let bufferSize: Int
-    let encoding : any Unicode.Encoding.Type
+    let encoding : IEncoding // any Unicode.Encoding.Type
     
     var byteBuffer = [UInt8]()
     var characterIterator: String.Iterator?
 
-    init(fd: FileDescriptor, bufferSize: Int, encoding: any Unicode.Encoding.Type = UTF8.self) {
+    init(fd: FileDescriptor, bufferSize: Int, encoding: IEncoding = .utf8) {
       self.fd = fd
       self.bufferSize = bufferSize
       self.encoding = encoding
@@ -227,7 +232,24 @@ public struct AsyncCharacterReader: AsyncSequence {
       while decodedCount > 0 {
         let slice = byteBuffer.prefix(decodedCount)
         var decoded : String
+        do {
+          decoded = try encoding.toString(Array(slice) )
+        } catch let e as IconvError {
+          if e == .incomplete {
+            decodedCount -= 1
+            continue
+          } else {
+            fatalError("string conversion error: \(e)")
+          }
+        } catch {
+          fatalError("string conversion error: \(error)")
+        }
+        
+        
+        /*
+        var decoded : String
         var reencoded : [UInt8]
+        
         
         switch encoding {
           case is ISOLatin1.Type:
@@ -241,12 +263,12 @@ public struct AsyncCharacterReader: AsyncSequence {
         }
         
         if reencoded.count == decodedCount {
+         */
           characterIterator = decoded.makeIterator()
           byteBuffer.removeFirst(decodedCount)
           return characterIterator?.next()
-        }
+//        }
 
-        decodedCount -= 1
       }
 
       // Wait for more bytes to complete the encoding sequence

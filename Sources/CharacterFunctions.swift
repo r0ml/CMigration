@@ -4,6 +4,7 @@
 import System
 import Darwin
 
+/*
 /// A forward Unicode parser that maps each byte directly to a Latin-1 scalar.
 ///
 /// Used as the `ForwardParser` associated type of ``ISOLatin1``.
@@ -119,6 +120,8 @@ public extension String {
     return result
   }
 }
+
+*/
 
 /// Returns a human-readable error message for a POSIX regex error code.
 ///
@@ -369,8 +372,10 @@ func firstInvalidUTF8Index(in bytes: [UInt8]) -> Int? {
 /// - Returns: A `Unicode.Encoding.Type` for `UTF-8`, `ISO-8859-1`, or `UTF-16`;
 ///   `nil` for all other codeset names.
 extension Environment {
-  public static func getStringEncoding() -> (any Unicode.Encoding.Type)? {
+  public static func getStringEncoding() -> IEncoding { // any Unicode.Encoding.Type)? {
     let codeset = String(cString: nl_langinfo(CODESET))
+    return IEncoding(codeset) ?? .utf8
+    /*
     switch codeset.uppercased() {
       case "UTF-8":
         return Unicode.UTF8.self
@@ -385,6 +390,7 @@ extension Environment {
         debugPrint(codeset)
         return nil
     }
+     */
   }
 }
 

@@ -3,8 +3,9 @@
 
 import Darwin
 
-enum IconvError: Error {
+enum IconvError: Error, Equatable {
     case openFailed
+  case incomplete
     case conversionFailed(Int32)
 }
 
@@ -119,9 +120,12 @@ public struct IEncoding : Sendable {
             case E2BIG:
               continue
               
-            case EILSEQ, EINVAL:
+            case EILSEQ:
               throw IconvError.conversionFailed(error)
               
+            case EINVAL:
+              throw IconvError.incomplete
+
             default:
               throw IconvError.conversionFailed(error)
           }

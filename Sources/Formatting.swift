@@ -83,7 +83,7 @@ public extension String {
         vsnprintf(ptr.baseAddress, bufferSize, self, vaPtr)
       }
       let pp = UnsafeBufferPointer(start: ptr.baseAddress!, count: Int(n) )
-      return String(decoding: pp, as: ISOLatin1.self)
+      return String(platformString: Array(pp).map { CChar($0) } ) // decoding: pp, as: ISOLatin1.self)
     }
   }
 }
