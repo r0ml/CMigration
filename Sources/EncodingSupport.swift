@@ -44,7 +44,7 @@ public struct IEncoding : Sendable {
     return getIconvList()
   }
   
-  var canonical : String
+  public var canonical : String
   
   public init?(_ s : String) {
     if let k = iconv_canonicalize(s)  {
