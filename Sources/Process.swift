@@ -519,10 +519,16 @@ public actor DarwinProcess {
     // Spawn
     let argvStrings = [execu] + arguments.map { $0.asStringArgument() }
 
-    let nv = Environment.getenv().merging(env, uniquingKeysWith: { lhs, rhs in rhs} )
+    var nv = Environment.getenv().merging(env, uniquingKeysWith: { lhs, rhs in rhs} )
+    // FIXME: set LC_CTYPE to existing value of language + IEncoding
+    if let ct = encoding.ctypeVar(nv["LC_CTYPE"]) {
+      nv["LC_CTYPE"]=ct
+    }
+    
     let envpStrings: [String]? = nv.map { "\($0.key)=\($0.value)" }
 
-
+    
+    
     guard posix_spawnattr_init(&attr) == 0 else {
       throw log(POSIXErrno(fn: "posix_spawnattr_init"))
     }

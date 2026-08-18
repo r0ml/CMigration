@@ -71,7 +71,9 @@ public extension ShellCommand {
   /// Sets the locale to `""` (the user's environment locale), then calls the instance
   /// ``main()`` method and exits with its return value.
   static func main() async {
+    
     setlocale(LC_ALL, "")
+    
     var m = Self()
     let z = await m.main()
     exit(z)

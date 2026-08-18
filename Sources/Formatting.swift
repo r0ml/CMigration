@@ -83,13 +83,11 @@ public extension String {
         vsnprintf(ptr.baseAddress, bufferSize, self, vaPtr)
       }
       let pp = UnsafeBufferPointer(start: ptr.baseAddress!, count: Int(n) )
-//      return String(platformString: Array(pp).map { CChar($0) } ) // decoding: pp, as: ISOLatin1.self)
-      let j = Environment.getStringEncoding()
-      if let res = try? j.toString(Array(pp)) {
-        return res
-      } else {
-        fatalError("failed to convert \(pp)")
-      }
+      // Latin-1 -> UTF8 can never fail: every byte 0-255 maps to a valid scalar.
+      // vsnprintf's output is raw bytes with no encoding of its own (e.g. %c on an
+      // arbitrary arithmetic value), so decoding via the process locale (which may
+      // reject byte sequences that aren't valid UTF-8) is wrong here.
+      return try! IEncoding.latin1.toString(Array(pp))
     }
   }
 }

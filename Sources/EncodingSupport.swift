@@ -256,8 +256,37 @@ public struct IEncoding : Sendable {
 
     return newbuf
   }
-}
 
+  func ctypeVar(_ prev : String?) -> String? {
+    var pr : String
+    if let prev {
+      pr = prev
+    } else {
+      guard let p = setlocale(LC_CTYPE, nil) else {
+        return nil
+      }
+      pr = String(cString: p)
+    }
+    
+    let codeset = canonical
+    let current = pr
+    
+    let locale: String
+    if let dot = current.firstIndex(of: ".") {
+      // Replace codeset, preserving @modifier if present.
+      if let at = current[dot...].firstIndex(of: "@") {
+        locale = String(current[..<dot]) +
+        "." + codeset +
+        String(current[at...])
+      } else {
+        locale = String(current[..<dot]) + "." + codeset
+      }
+    } else {
+      locale = current + "." + codeset
+    }
+    return locale
+  }
+}
 
  import Playgrounds
  #Playground {
