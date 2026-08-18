@@ -58,21 +58,28 @@ public extension String {
   ///   - args: Zero or more `CVarArg` values matching the format specifiers.
   /// - Returns: The formatted string.
   func cFormat(_ args : [CVarArg]) -> String {
-/*    for (i,a) in args.enumerated() {
-      if a is String {
-        return (a as! String).withCString {
-          let newa = args[0..<i] + [$0] + args[i+1..<args.count]
-          return self.cFormat(Array(newa))
+    return self.cFormat(erasing: args.map { $0 as Any })
+  }
+
+  /// Formats using an array of `Any` so that `String` arguments can be detected
+  /// with a plain dynamic cast rather than downcasting through the `any CVarArg`
+  /// existential, which the compiler cannot prove succeeds for `String`.
+  private func cFormat(erasing args : [Any]) -> String {
+    for (i,a) in args.enumerated() {
+      if let s = a as? String {
+        return s.withCString {
+          let newa = args[0..<i] + [$0 as Any] + args[(i+1)...]
+          return self.cFormat(erasing: Array(newa))
         }
       }
     }
-*/
-    
-    let bufferSize = withVaList(args) { vaList in
+
+    let cArgs = args.map { $0 as! CVarArg }
+    let bufferSize = withVaList(cArgs) { vaList in
       1+Int(vsnprintf(nil, 0, self, vaList))
     }
     return withUnsafeTemporaryAllocation(of: UInt8.self, capacity: bufferSize) { ptr in
-      let n = withVaList(args) { vaPtr in
+      let n = withVaList(cArgs) { vaPtr in
         vsnprintf(ptr.baseAddress, bufferSize, self, vaPtr)
       }
       let pp = UnsafeBufferPointer(start: ptr.baseAddress!, count: Int(n) )
