@@ -155,8 +155,8 @@ public actor DarwinProcess {
     public let error : String
 
     /// The standard output decoded as a UTF-8 string.
-    public func string(encoded: IEncoding) -> String { 
-      String(decoding: data, as: UTF8.self)
+    public func string(encoded: IEncoding) throws -> String { 
+      try encoded.toString(data)
     }
 
   }

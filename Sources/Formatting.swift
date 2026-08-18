@@ -46,7 +46,7 @@ public extension String {
   ///   - args: The string argument.
   /// - Returns: The formatted string.
   func cFormat(_ args : CVarArg...) -> String {
-    return cFormat(self, args)
+    return self.cFormat(args)
   }
 
   /// Formats a string using a C-style `printf` format and a variadic argument list.
@@ -58,15 +58,16 @@ public extension String {
   ///   - args: Zero or more `CVarArg` values matching the format specifiers.
   /// - Returns: The formatted string.
   func cFormat(_ args : [CVarArg]) -> String {
-    for (i,a) in args.enumerated() {
+/*    for (i,a) in args.enumerated() {
       if a is String {
         return (a as! String).withCString {
           let newa = args[0..<i] + [$0] + args[i+1..<args.count]
-          return cFormat(Array(newa))
+          return self.cFormat(Array(newa))
         }
       }
     }
-
+*/
+    
     let bufferSize = withVaList(args) { vaList in
       1+Int(vsnprintf(nil, 0, self, vaList))
     }
