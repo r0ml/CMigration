@@ -56,99 +56,187 @@ public struct IEncoding : Sendable {
     }
   }
   
-// a method, so "self" is the encoding
+  // a method, so "self" is the encoding
   // argument is the byte sequence
   // result is the String
   public func toString(
-      _ input: [UInt8],
+    _ input: [UInt8],
   ) throws -> String {
-      guard let cd = iconv_open("UTF-8", canonical) else {
-          throw IconvError.openFailed
-      }
-      defer {
-          iconv_close(cd)
-      }
-
-      var input = input
-      var output = [UInt8](repeating: 0, count: 4096)
-      var result: [UInt8] = []
-
-      try input.withUnsafeMutableBytes { inputBuffer in
-        var inPtr = inputBuffer.baseAddress?.assumingMemoryBound(to: CChar.self)
-          var inLeft = inputBuffer.count
-
-          while inLeft != 0 {
-              var outProduced = 0
-
-              let status = output.withUnsafeMutableBytes { outputBuffer in
-                  var outPtr: UnsafeMutablePointer<CChar>? = outputBuffer.baseAddress!.assumingMemoryBound(to: CChar.self)
-                  var outLeft = outputBuffer.count
-
-                  let status = iconv(
-                      cd,
-                      &inPtr,
-                      &inLeft,
-                      &outPtr,
-                      &outLeft
-                  )
-
-                  outProduced = outputBuffer.count - outLeft
-                  return status
-              }
-
-              result.append(contentsOf: output.prefix(outProduced))
-
-              if status == -1 {
-                  let error = errno
-
-                  switch error {
-                  case E2BIG:
-                      continue
-
-                  case EILSEQ, EINVAL:
-                      throw IconvError.conversionFailed(error)
-
-                  default:
-                      throw IconvError.conversionFailed(error)
-                  }
-              }
+    guard let cd = iconv_open("UTF-8", canonical) else {
+      throw IconvError.openFailed
+    }
+    defer {
+      iconv_close(cd)
+    }
+    
+    var input = input
+    var output = [UInt8](repeating: 0, count: 4096)
+    var result: [UInt8] = []
+    
+    try input.withUnsafeMutableBytes { inputBuffer in
+      var inPtr = inputBuffer.baseAddress?.assumingMemoryBound(to: CChar.self)
+      var inLeft = inputBuffer.count
+      
+      while inLeft != 0 {
+        var outProduced = 0
+        
+        let status = output.withUnsafeMutableBytes { outputBuffer in
+          var outPtr: UnsafeMutablePointer<CChar>? = outputBuffer.baseAddress!.assumingMemoryBound(to: CChar.self)
+          var outLeft = outputBuffer.count
+          
+          let status = iconv(
+            cd,
+            &inPtr,
+            &inLeft,
+            &outPtr,
+            &outLeft
+          )
+          
+          outProduced = outputBuffer.count - outLeft
+          return status
+        }
+        
+        result.append(contentsOf: output.prefix(outProduced))
+        
+        if status == -1 {
+          let error = errno
+          
+          switch error {
+            case E2BIG:
+              continue
+              
+            case EILSEQ, EINVAL:
+              throw IconvError.conversionFailed(error)
+              
+            default:
+              throw IconvError.conversionFailed(error)
           }
-
-          // Flush the conversion state.
-          while true {
-              var outProduced = 0
-
-              let status = output.withUnsafeMutableBytes { outputBuffer in
-                  var outPtr: UnsafeMutablePointer<CChar>? = outputBuffer.baseAddress!.assumingMemoryBound(to: CChar.self)
-                  var outLeft = outputBuffer.count
-
-                  let status = iconv(
-                      cd,
-                      nil,
-                      nil,
-                      &outPtr,
-                      &outLeft
-                  )
-
-                  outProduced = outputBuffer.count - outLeft
-                  return status
-              }
-
-              result.append(contentsOf: output.prefix(outProduced))
-
-              if status != -1 {
-                  break
-              }
-
-              if errno != E2BIG {
-                  throw IconvError.conversionFailed(errno)
-              }
-          }
+        }
       }
-
+      
+      // Flush the conversion state.
+      while true {
+        var outProduced = 0
+        
+        let status = output.withUnsafeMutableBytes { outputBuffer in
+          var outPtr: UnsafeMutablePointer<CChar>? = outputBuffer.baseAddress!.assumingMemoryBound(to: CChar.self)
+          var outLeft = outputBuffer.count
+          
+          let status = iconv(
+            cd,
+            nil,
+            nil,
+            &outPtr,
+            &outLeft
+          )
+          
+          outProduced = outputBuffer.count - outLeft
+          return status
+        }
+        
+        result.append(contentsOf: output.prefix(outProduced))
+        
+        if status != -1 {
+          break
+        }
+        
+        if errno != E2BIG {
+          throw IconvError.conversionFailed(errno)
+        }
+      }
+    }
+    
+    
     return String(decoding: result, as: UTF8.self)
   }
-  
+
+  public func toBytes(_ s : String) throws -> [CChar] {
+    guard let cd = iconv_open(canonical, "UTF-8") else {
+      throw IconvError.openFailed
+    }
+    defer {
+      iconv_close(cd)
+    }
+
+    var input = Array(s.utf8)
+    var output = [UInt8](repeating: 0, count: 4096)
+    var newbuf: [UInt8] = []
+
+    try input.withUnsafeMutableBytes { inputBuffer in
+      var inPtr = inputBuffer.baseAddress?.assumingMemoryBound(to: CChar.self)
+      var inLeft = inputBuffer.count
+
+      while inLeft != 0 {
+        var outProduced = 0
+
+        let status = output.withUnsafeMutableBytes { outputBuffer in
+          var outPtr: UnsafeMutablePointer<CChar>? = outputBuffer.baseAddress!.assumingMemoryBound(to: CChar.self)
+          var outLeft = outputBuffer.count
+
+          let status = iconv(
+            cd,
+            &inPtr,
+            &inLeft,
+            &outPtr,
+            &outLeft
+          )
+
+          outProduced = outputBuffer.count - outLeft
+          return status
+        }
+
+        newbuf.append(contentsOf: output.prefix(outProduced))
+
+        if status == -1 {
+          let error = errno
+
+          switch error {
+            case E2BIG:
+              continue
+
+            case EILSEQ, EINVAL:
+              throw IconvError.conversionFailed(error)
+
+            default:
+              throw IconvError.conversionFailed(error)
+          }
+        }
+      }
+
+      // Flush the conversion state.
+      while true {
+        var outProduced = 0
+
+        let status = output.withUnsafeMutableBytes { outputBuffer in
+          var outPtr: UnsafeMutablePointer<CChar>? = outputBuffer.baseAddress!.assumingMemoryBound(to: CChar.self)
+          var outLeft = outputBuffer.count
+
+          let status = iconv(
+            cd,
+            nil,
+            nil,
+            &outPtr,
+            &outLeft
+          )
+
+          outProduced = outputBuffer.count - outLeft
+          return status
+        }
+
+        newbuf.append(contentsOf: output.prefix(outProduced))
+
+        if status != -1 {
+          break
+        }
+
+        if errno != E2BIG {
+          throw IconvError.conversionFailed(errno)
+        }
+      }
+    }
+
+    return newbuf.map { CChar(bitPattern: $0) }
+  }
 }
 
 /*
