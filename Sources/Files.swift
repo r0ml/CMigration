@@ -312,7 +312,7 @@ public func readFileAsString(at path: String) throws -> String {
 /// A typed POSIX error that captures an `errno` code, an optional function name, and an optional reason string.
 ///
 /// `POSIXErrno` conforms to `Error` and provides a human-readable description via `strerror(3)`.
-public struct POSIXErrno: Error {
+public struct POSIXErrno: Error, CustomStringConvertible, CustomDebugStringConvertible {
   /// The `errno` code from the failed POSIX call.
   public let code: Int32
   /// The name of the function that failed, if provided.
