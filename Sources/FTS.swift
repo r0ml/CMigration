@@ -250,8 +250,8 @@ public class FTSWalker: Sequence, IteratorProtocol {
       let nl = Int(k!.pointee.fts_namelen)
         let jk = UnsafeRawPointer(k!).advanced(by: MemoryLayout.offset(of: \FTSENT.fts_name)!)
 
-      let nam = jk.withMemoryRebound(to: Int8.self, capacity: nl) {jj in
-        let buf = UnsafeBufferPointer(start: jj, count: nl)
+      let nam = jk.withMemoryRebound(to: Int8.self, capacity: nl + 1) {jj in
+        let buf = UnsafeBufferPointer(start: jj, count: nl + 1)
           let h = Array(buf)
         return String(platformString: h)
         }
@@ -419,8 +419,8 @@ public struct FTSEntry {
     // so, before the memory beyond the defined end of the struct is tampered with, grab the fts_name from
     // the struct.
     let jk = UnsafeRawPointer(ff).advanced(by: MemoryLayout.offset(of: \FTSENT.fts_name)!)
-    jk.withMemoryRebound(to: Int8.self, capacity: Int(f.fts_namelen)) {jj in
-      let buf = UnsafeBufferPointer(start: jj, count: Int(f.fts_namelen))
+    jk.withMemoryRebound(to: Int8.self, capacity: Int(f.fts_namelen) + 1) {jj in
+      let buf = UnsafeBufferPointer(start: jj, count: Int(f.fts_namelen) + 1)
       let h = Array(buf)
       self.name = String(platformString: h)
     }
