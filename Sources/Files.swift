@@ -689,7 +689,7 @@ public func readlink(_ s : String) throws(POSIXErrno) -> String {
     throw POSIXErrno(errno)
   }
   path[lnklen] = 0
-  let r = String(platformString: Array(path[..<Int(lnklen)]))
+  let r = String(platformString: Array(path[...Int(lnklen)]))
   return r
 }
 
