@@ -135,7 +135,7 @@ public extension FilePath {
   func setPermissions(_ p : FilePermissions, followSymlinks: Bool = false) throws(POSIXErrno) {
     let f = followSymlinks ? chmod : lchmod
     if 0 != f(self.string, p.rawValue) {
-      throw POSIXErrno(fn: "setPermissions")
+      throw POSIXErrno(fn: "setPermissions", reason: self.string)
     }
   }
 
@@ -145,7 +145,7 @@ public extension FilePath {
   /// - Throws: ``POSIXErrno`` if `symlink(2)` fails.
   func createSymbolicLink(to target: FilePath) throws(POSIXErrno) {
     if 0 != symlink(target.string, self.string) {
-      throw POSIXErrno(fn: "createSymbolicLink")
+      throw POSIXErrno(fn: "createSymbolicLink", reason: self.string)
     }
   }
 
