@@ -354,6 +354,10 @@ public struct POSIXErrno: Error {
   public var localizedDescription : String {
     return description
   }
+  
+  public var debugDescription : String {
+    return description
+  }
 }
 
 /// The maximum filesystem path length on the current platform, as an `Int`.
