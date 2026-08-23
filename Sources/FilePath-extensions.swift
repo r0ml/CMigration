@@ -192,7 +192,7 @@ public extension FilePath {
     var d = FilePath((self.root ?? FilePath.Root(".")).string)
     for p in self.components {
       d.append(p)
-        if (try? d.stat().type) == .directory { continue }
+        if (try? d.stat(followTargetSymlink: true).type) == .directory { continue }
       if 0 != mkdir(d.string, pr.rawValue) {
         throw POSIXErrno(fn: "createDirectory")
       }
