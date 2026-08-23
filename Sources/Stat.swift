@@ -1,7 +1,7 @@
 // Modernized by Robert "r0ml" Lefkowitz <code@liberally.net> in 2026
 
 import Darwin
-import System
+// import System
 
 // #if compiler(<6.4)
 // #if !canImport(FoundationModels)
