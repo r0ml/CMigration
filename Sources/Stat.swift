@@ -19,27 +19,27 @@ public extension FilePath {
 }
 
 // #if !canImport(Foundation, _version: "27.0")
-public struct DeviceID {
+public struct DeviceID : Equatable {
   public var rawValue: dev_t
   public init(_ d : dev_t) { self.rawValue = d }
 }
 
-public struct Inode {
+public struct Inode : Equatable{
   public var rawValue: ino_t
   public init(_ d : ino_t) { self.rawValue = d }
 }
 
-public struct UserID {
+public struct UserID : Equatable {
   public var rawValue: uid_t
   public init(_ d : uid_t) { self.rawValue = d }
 }
 
-public struct GroupID {
+public struct GroupID : Equatable {
   public var rawValue: gid_t
   public init(_ d : gid_t) { self.rawValue = d }
 }
 
-public struct FileMode {
+public struct FileMode : Equatable {
   public var rawValue: mode_t
   public init(_ d : mode_t) { self.rawValue = d }
 }
