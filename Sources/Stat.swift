@@ -33,7 +33,7 @@ public typealias FileMode = mode_t
 // @available(anyAppleOS, obsoleted: 27.0)
   public struct Stat {
     /// Device inode resides on.
-    public var device : DeviceID
+    public var deviceID : DeviceID
     /// Inode number.
     public var inode : Inode
     /// Protection mode bits.
@@ -47,7 +47,7 @@ public typealias FileMode = mode_t
     /// Group ID of the owner.
     public var groupID : GroupID
     /// Device number for special files.
-    public var specialDevice : DeviceID
+    public var specialDeviceID : DeviceID
     /// Time the file was created.
     public var st_birthtim : timespec
     /// Time of last access.
@@ -107,12 +107,12 @@ public typealias FileMode = mode_t
       if e != 0 {
         throw POSIXErrno(e)
       }
-      device = DeviceID(statbuf.st_dev)
+      deviceID = DeviceID(statbuf.st_dev)
       inode = Inode(statbuf.st_ino)
       permissions = FilePermissions(rawValue: statbuf.st_mode)
       type = FileType(rawValue: statbuf.st_mode)
       linkCount = Int(statbuf.st_nlink)
-      specialDevice = DeviceID(statbuf.st_rdev)
+      specialDeviceID = DeviceID(statbuf.st_rdev)
       userID = UserID(statbuf.st_uid)
       groupID = GroupID(statbuf.st_gid)
       st_birthtim  = statbuf.st_birthtimespec
