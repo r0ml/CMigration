@@ -19,11 +19,30 @@ public extension FilePath {
 }
 
 // #if !canImport(Foundation, _version: "27.0")
-public typealias DeviceID = dev_t
-public typealias Inode = ino_t
-public typealias UserID = uid_t
-public typealias GroupID = gid_t
-public typealias FileMode = mode_t
+public struct DeviceID {
+  public var rawValue: dev_t
+  public init(_ d : dev_t) { self.rawValue = d }
+}
+
+public struct Inode {
+  public var rawValue: ino_t
+  public init(_ d : ino_t) { self.rawValue = d }
+}
+
+public struct UserID {
+  public var rawValue: uid_t
+  public init(_ d : uid_t) { self.rawValue = d }
+}
+
+public struct GroupID {
+  public var rawValue: gid_t
+  public init(_ d : gid_t) { self.rawValue = d }
+}
+
+public struct FileMode {
+  public var rawValue: mode_t
+  public init(_ d : mode_t) { self.rawValue = d }
+}
 
 
 /// A Swift value type wrapping the `stat(2)` structure returned by the kernel.
