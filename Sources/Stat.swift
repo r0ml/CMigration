@@ -4,12 +4,17 @@ import Darwin
 import System
 
 // #if compiler(<6.4)
-#if !canImport(FoundationModels)
-
+// #if !canImport(FoundationModels)
+// #if !canImport(Foundation, _version: "27.0")
+  
 
 public extension FilePath {
-  func stat(followTargetSymlinks: Bool = false) {
-    
+  func stat(followTargetSymlink: Bool = false) throws(Errno) -> Stat {
+    do {
+      return try Stat(for: self, followTargetSymlink: followTargetSymlink)
+    } catch let e {
+      throw Errno(rawValue: e.code)
+    }
   }
 }
 
@@ -38,7 +43,7 @@ public typealias FileMode = mode_t
     /// Number of hard links.
     public var linkCount : Int
     /// User ID of the owner.
-    public var userID : UserrID
+    public var userID : UserID
     /// Group ID of the owner.
     public var groupID : GroupID
     /// Device number for special files.
@@ -102,20 +107,20 @@ public typealias FileMode = mode_t
       if e != 0 {
         throw POSIXErrno(e)
       }
-      device = UInt(UInt32(bitPattern: statbuf.st_dev))
-      inode = UInt(statbuf.st_ino)
+      device = DeviceID(statbuf.st_dev)
+      inode = Inode(statbuf.st_ino)
       permissions = FilePermissions(rawValue: statbuf.st_mode)
       type = FileType(rawValue: statbuf.st_mode)
-      links = UInt(statbuf.st_nlink)
-      specialDevice = UInt(UInt32(bitPattern: statbuf.st_rdev))
-      userId = UInt(statbuf.st_uid)
-      groupId = UInt(statbuf.st_gid)
-      whenCreated  = DateTime.init(statbuf.st_birthtimespec)
-      lastAccessed = DateTime(statbuf.st_atimespec)
-      lastModified = DateTime(statbuf.st_mtimespec)
-      lastChanged = DateTime(statbuf.st_ctimespec)
+      linkCount = Int(statbuf.st_nlink)
+      specialDevice = DeviceID(statbuf.st_rdev)
+      userID = UserID(statbuf.st_uid)
+      groupID = GroupID(statbuf.st_gid)
+      st_birthtim  = statbuf.st_birthtimespec
+      st_atim = statbuf.st_atimespec
+      st_mtim = statbuf.st_mtimespec
+      st_ctim = statbuf.st_ctimespec
       size = UInt(statbuf.st_size)
-      blocks = UInt(statbuf.st_blocks)
+      blocksAllocated = Int64(statbuf.st_blocks)
       blockSize = UInt(statbuf.st_blksize)
       flags = FileFlags(rawValue: statbuf.st_flags)
       generationNumber = UInt64(statbuf.st_gen)
@@ -166,7 +171,7 @@ public struct FileFlags: OptionSet, Sendable, Hashable {
   /// Writes to file may only append (superuser).
   public static let systemAppend       = Self(rawValue: 1 << 18)
   /// Entitlement required for writing.
-  public static let SF_RESTRICTED   = Self(rawValue: 1 << 19)
+  public static let restricted   = Self(rawValue: 1 << 19)
   /// Item may not be removed, renamed, or mounted on.
   public static let systemNoUnlink     = Self(rawValue: 1 << 20)
   /// File is a firmlink.
@@ -234,7 +239,7 @@ public enum FileType {
 }
 
 
-#endif // compiler(<6.4)
+// #endif // compiler(<6.4)
 
 public extension FileFlags {
   /// Returns an array of individual flag values that are set in this value.

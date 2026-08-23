@@ -134,7 +134,7 @@ public struct AsyncLineReader: AsyncSequence {
       }
 
       guard go else { return nil }
-      var line = try encoding.toString(buffer)
+      let line = try encoding.toString(buffer)
       /*
       
       switch encoding {

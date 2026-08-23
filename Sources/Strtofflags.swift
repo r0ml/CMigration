@@ -72,7 +72,7 @@ public let setMapping = [
   "schg" : .systemImmutable,
   "schange" : .systemImmutable,
   "simmutable" : .systemImmutable,
-  "restricted" : .restricted,
+  "restricted" : .rest`ricted,
   "sunlnk" : .systemNoUnlink,
   "sunlink" : .systemNoUnlink,
   "uappnd" : .userAppend,
