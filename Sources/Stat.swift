@@ -30,31 +30,31 @@ public typealias FileMode = mode_t
     /// Device inode resides on.
     public var device : DeviceID
     /// Inode number.
-    public var inode : UInt
+    public var inode : Inode
     /// Protection mode bits.
     public var permissions: FilePermissions
     /// File type.
     public var type : FileType
     /// Number of hard links.
-    public var links : UInt
+    public var linkCount : Int
     /// User ID of the owner.
-    public var userId : UInt
+    public var userID : UserrID
     /// Group ID of the owner.
-    public var groupId : UInt
+    public var groupID : GroupID
     /// Device number for special files.
     public var specialDevice : DeviceID
     /// Time the file was created.
-    public var whenCreated : DateTime
+    public var st_birthtim : timespec
     /// Time of last access.
-    public var lastAccessed : DateTime
+    public var st_atim : timespec
     /// Time of last data modification.
-    public var lastModified : DateTime
+    public var st_mtim : timespec
     /// Time of last status change.
-    public var lastChanged : DateTime
+    public var st_ctim : timespec
     /// File size in bytes.
     public var size : UInt
     /// Number of blocks allocated.
-    public var blocks : UInt
+    public var blocksAllocated : Int64
     /// Optimal I/O block size.
     public var blockSize : UInt
     /// User-defined file flags (see ``FileFlags``).

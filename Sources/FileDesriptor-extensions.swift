@@ -115,6 +115,24 @@ public extension FileDescriptor {
       throw POSIXErrno(fn: "setTimes")
     }
   }
+
+  /// Sets the access and modification timestamps of this file.
+  ///
+  /// Pass `nil` for either parameter to leave that timestamp unchanged.
+  ///
+  /// - Parameters:
+  ///   - modified: The new modification time, or `nil` to omit.
+  ///   - accessed: The new access time, or `nil` to omit.
+  /// - Throws: ``POSIXErrno`` if `futimens(2)` fails.
+  func setTimes(modified: timespec? = nil, accessed: timespec? = nil) throws(POSIXErrno) {
+    let omit = timespec(tv_sec: 0, tv_nsec: Int(Darwin.UTIME_OMIT))
+    var times : (timespec, timespec) = ( modified ?? omit, accessed ?? omit)
+    if futimens( self.rawValue, &times.0) != 0 {
+      throw POSIXErrno(fn: "setTimes")
+    }
+  }
+
+
   
   /// Reads all bytes from this descriptor and decodes them as a UTF-8 string.
   ///
