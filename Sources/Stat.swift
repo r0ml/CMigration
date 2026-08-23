@@ -86,11 +86,11 @@ public struct FileMode : Equatable, Hashable {
     /// Time of last status change.
     public var st_ctim : timespec
     /// File size in bytes.
-    public var size : UInt
+    public var size : Int64
     /// Number of blocks allocated.
     public var blocksAllocated : Int64
     /// Optimal I/O block size.
-    public var blockSize : UInt
+    public var preferredIOBlockSize : Int
     /// User-defined file flags (see ``FileFlags``).
     public var flags : FileFlags
     /// File generation number.
