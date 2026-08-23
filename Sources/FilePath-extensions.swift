@@ -5,12 +5,23 @@ import System
 import Darwin
 
 public extension FilePath {
+  
+
   /// Returns `true` if the path refers to a regular file (not following symlinks).
   ///
   /// - Throws: ``POSIXErrno`` if `lstat(2)` fails.
   func isRegularFile() throws(POSIXErrno) -> Bool {
-    let statBuf = try FileMetadata(for: self, followSymlinks: false)
-    return statBuf.filetype == .regular
+    if #available(macOS 27.0, iOS 27.0, *) {
+      do {
+        let statBuf = try self.stat(followTargetSymlink: false)
+        return statBuf.type == .regular
+      } catch(let e) {
+        throw POSIXErrno(e.rawValue, fn: "stat", reason: string)
+      }
+    } else {
+      let statBuf = try FileMetadata(for: self, followSymlinks: false)
+      return statBuf.filetype == .regular
+    }
   }
 
   /// Renames this path to `to`.
@@ -180,7 +191,11 @@ public extension FilePath {
     var d = FilePath((self.root ?? FilePath.Root(".")).string)
     for p in self.components {
       d.append(p)
-      if (try? FileMetadata(for: d))?.filetype == .directory { continue }
+      if #available(macOS 27.0, iOS 27.0, *) {
+        if (try? d.stat().type) == .directory { continue }
+      } else {
+        if (try? FileMetadata(for: d))?.filetype == .directory { continue }
+      }
       if 0 != mkdir(d.string, pr.rawValue) {
         throw POSIXErrno(fn: "createDirectory")
       }
@@ -226,10 +241,19 @@ public extension FilePath {
   ///
   /// - Throws: ``POSIXErrno`` if any removal step fails.
   func removeTree() throws(POSIXErrno) {
-    guard let st = try? FileMetadata(for: self, followSymlinks: false) else {
-      return
+    let isdir : Bool
+    if #available(macOS 27.0, iOS 27.0, *) {
+      guard let st = try? self.stat(followTargetSymlink: false) else {
+        return
+      }
+      isdir = st.type == .directory
+    } else {
+      guard let st = try? FileMetadata(for: self, followSymlinks: false) else {
+        return
+      }
+      isdir = st.filetype == .directory
     }
-    if st.filetype == .directory {
+    if isdir {
       let j = try self.listDirectory()
       for i in j {
         try self.appending(i).removeTree()

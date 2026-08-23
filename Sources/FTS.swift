@@ -352,8 +352,17 @@ public struct FTSEntry {
     }
   }
 
-  /// The `stat(2)` metadata for this entry, wrapped as a ``FileMetadata``.
-  public var statp : FileMetadata
+  /// The `stat(2)` metadata for this entry, wrapped as a ``FileMetadata` 
+  @available(macOS 27.0, iOS 27.0, *)
+  public var statpx : Stat {
+    get { _statpx as! Stat }
+    set { _statpx = newValue }
+  }
+  public var _statpx : Any?
+  
+  @available(macOS, obsoleted: 27.0)
+  @available(iOS, obsoleted: 27.0)
+  public var statp : FileMetadata!
 
   /// The file descriptor of the directory containing this entry (if `FTS_NOCHDIR` is not set).
   var symfd : Int
@@ -411,7 +420,11 @@ public struct FTSEntry {
     self.parent_ = f.fts_parent
     self.link_ = f.fts_link
     self.path = String(cString: f.fts_path)
-    self.statp = FileMetadata(from: f.fts_statp)
+    if #available(macOS 27.0, iOS 27.0, *) {
+      self._statpx = Stat.init(rawValue: f.fts_statp.pointee)
+    } else {
+      self.statp = FileMetadata(from: f.fts_statp)
+    }
     self.symfd = Int(f.fts_symfd)
 
     // AAARGH!  The definition of FTSENT (entry) defines the file name as a char[1] -- when in reality,

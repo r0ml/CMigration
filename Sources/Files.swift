@@ -331,7 +331,7 @@ public struct POSIXErrno: Error, CustomStringConvertible, CustomDebugStringConve
     self.function = fn
     self.reason = reason
   }
-
+  
   /// A human-readable description combining the function name, reason, and `strerror` text.
   public var description : String {
     let z = String(cString: strerror(code))
@@ -490,104 +490,106 @@ public enum FileType {
 }
 
 /// A Swift value type wrapping the `stat(2)` structure returned by the kernel.
+/// Obsolete in macOS 27.0 when Swift System added Stat
 ///
 /// All timestamps are represented as ``DateTime`` values.
-public struct FileMetadata {
-  /// Device inode resides on.
-  public var device : UInt
-  /// Inode number.
-  public var inode : UInt
-  /// Protection mode bits.
-  public var permissions: FilePermissions
-  /// File type.
-  public var filetype : FileType
-  /// Number of hard links.
-  public var links : UInt
-  /// User ID of the owner.
-  public var userId : UInt
-  /// Group ID of the owner.
-  public var groupId : UInt
-  /// Device number for special files.
-  public var rawDevice : UInt
-  /// Time the file was created.
-  public var whenCreated : DateTime
-  /// Time of last access.
-  public var lastAccessed : DateTime
-  /// Time of last data modification.
-  public var lastModified : DateTime
-  /// Time of last status change.
-  public var lastChanged : DateTime
-  /// File size in bytes.
-  public var size : UInt
-  /// Number of blocks allocated.
-  public var blocks : UInt
-  /// Optimal I/O block size.
-  public var blockSize : UInt
-  /// User-defined file flags (see ``FileFlags``).
-  public var flags : FileFlags
-  /// File generation number.
-  public var generation : UInt
-
-  /// Initialises by calling `stat(2)` or `lstat(2)` on the given path.
-  ///
-  /// - Parameters:
-  ///   - f: The path to stat.
-  ///   - followSymlinks: When `true` (default), symlinks are followed via `stat(2)`;
-  ///     when `false`, `lstat(2)` is used.
-  /// - Throws: ``POSIXErrno`` on failure.
-  public init(for f: FilePath, followSymlinks: Bool = true) throws(POSIXErrno) {
-    var statbuf = Darwin.stat()
-    let e = (followSymlinks ? stat : lstat)(f.string, &statbuf)
-    try self.init(e == 0 ? 0 : errno, statbuf)
-  }
-
-  /// Initialises by calling `fstat(2)` on the given file descriptor.
-  ///
-  /// - Parameter f: An open file descriptor.
-  /// - Throws: ``POSIXErrno`` on failure.
-  public init(for f: FileDescriptor) throws(POSIXErrno) {
-    var statbuf = Darwin.stat()
-    let e = fstat(f.rawValue, &statbuf)
-    try self.init(e == 0 ? 0 : errno, statbuf)
-  }
-
-  /// Initialises from an existing `stat` pointer (used by the FTS API).
-  ///
-  /// - Parameter from: Pointer to a valid `stat` struct.
-  public init(from: UnsafePointer<stat>) {
-    do {
-      try self.init(0, from.pointee)
-    } catch {
-      fatalError("doesn't throw with errno 0")
+@available(macOS, obsoleted: 27.0)
+@available(iOS, obsoleted: 27.0)
+  public struct FileMetadata {
+    /// Device inode resides on.
+    public var device : UInt
+    /// Inode number.
+    public var inode : UInt
+    /// Protection mode bits.
+    public var permissions: FilePermissions
+    /// File type.
+    public var filetype : FileType
+    /// Number of hard links.
+    public var links : UInt
+    /// User ID of the owner.
+    public var userId : UInt
+    /// Group ID of the owner.
+    public var groupId : UInt
+    /// Device number for special files.
+    public var rawDevice : UInt
+    /// Time the file was created.
+    public var whenCreated : DateTime
+    /// Time of last access.
+    public var lastAccessed : DateTime
+    /// Time of last data modification.
+    public var lastModified : DateTime
+    /// Time of last status change.
+    public var lastChanged : DateTime
+    /// File size in bytes.
+    public var size : UInt
+    /// Number of blocks allocated.
+    public var blocks : UInt
+    /// Optimal I/O block size.
+    public var blockSize : UInt
+    /// User-defined file flags (see ``FileFlags``).
+    public var flags : FileFlags
+    /// File generation number.
+    public var generation : UInt
+    
+    /// Initialises by calling `stat(2)` or `lstat(2)` on the given path.
+    ///
+    /// - Parameters:
+    ///   - f: The path to stat.
+    ///   - followSymlinks: When `true` (default), symlinks are followed via `stat(2)`;
+    ///     when `false`, `lstat(2)` is used.
+    /// - Throws: ``POSIXErrno`` on failure.
+    public init(for f: FilePath, followSymlinks: Bool = true) throws(POSIXErrno) {
+      var statbuf = Darwin.stat()
+      let e = (followSymlinks ? stat : lstat)(f.string, &statbuf)
+      try self.init(e == 0 ? 0 : errno, statbuf)
+    }
+    
+    /// Initialises by calling `fstat(2)` on the given file descriptor.
+    ///
+    /// - Parameter f: An open file descriptor.
+    /// - Throws: ``POSIXErrno`` on failure.
+    public init(for f: FileDescriptor) throws(POSIXErrno) {
+      var statbuf = Darwin.stat()
+      let e = fstat(f.rawValue, &statbuf)
+      try self.init(e == 0 ? 0 : errno, statbuf)
+    }
+    
+    /// Initialises from an existing `stat` pointer (used by the FTS API).
+    ///
+    /// - Parameter from: Pointer to a valid `stat` struct.
+    public init(from: UnsafePointer<stat>) {
+      do {
+        try self.init(0, from.pointee)
+      } catch {
+        fatalError("doesn't throw with errno 0")
+      }
+    }
+    
+    /// Private designated initialiser: populates all fields from a `stat` struct,
+    /// or throws if `e` is non-zero.
+    private init(_ e : Int32, _ statbuf : stat) throws(POSIXErrno) {
+      if e != 0 {
+        throw POSIXErrno(e)
+      }
+      device = UInt(UInt32(bitPattern: statbuf.st_dev))
+      inode = UInt(statbuf.st_ino)
+      permissions = FilePermissions(rawValue: statbuf.st_mode)
+      filetype = FileType(rawValue: statbuf.st_mode)
+      links = UInt(statbuf.st_nlink)
+      rawDevice = UInt(UInt32(bitPattern: statbuf.st_rdev))
+      userId = UInt(statbuf.st_uid)
+      groupId = UInt(statbuf.st_gid)
+      whenCreated  = DateTime.init(statbuf.st_birthtimespec)
+      lastAccessed = DateTime(statbuf.st_atimespec)
+      lastModified = DateTime(statbuf.st_mtimespec)
+      lastChanged = DateTime(statbuf.st_ctimespec)
+      size = UInt(statbuf.st_size)
+      blocks = UInt(statbuf.st_blocks)
+      blockSize = UInt(statbuf.st_blksize)
+      flags = FileFlags(rawValue: statbuf.st_flags)
+      generation = UInt(statbuf.st_gen)
     }
   }
-
-  /// Private designated initialiser: populates all fields from a `stat` struct,
-  /// or throws if `e` is non-zero.
-  private init(_ e : Int32, _ statbuf : stat) throws(POSIXErrno) {
-    if e != 0 {
-      throw POSIXErrno(e)
-    }
-    device = UInt(UInt32(bitPattern: statbuf.st_dev))
-    inode = UInt(statbuf.st_ino)
-    permissions = FilePermissions(rawValue: statbuf.st_mode)
-    filetype = FileType(rawValue: statbuf.st_mode)
-    links = UInt(statbuf.st_nlink)
-    rawDevice = UInt(UInt32(bitPattern: statbuf.st_rdev))
-    userId = UInt(statbuf.st_uid)
-    groupId = UInt(statbuf.st_gid)
-    whenCreated  = DateTime.init(statbuf.st_birthtimespec)
-    lastAccessed = DateTime(statbuf.st_atimespec)
-    lastModified = DateTime(statbuf.st_mtimespec)
-    lastChanged = DateTime(statbuf.st_ctimespec)
-    size = UInt(statbuf.st_size)
-    blocks = UInt(statbuf.st_blocks)
-    blockSize = UInt(statbuf.st_blksize)
-    flags = FileFlags(rawValue: statbuf.st_flags)
-    generation = UInt(statbuf.st_gen)
-  }
-}
-
 
 /// Path to the controlling terminal device (`/dev/tty`).
 public let _PATH_TTY = "/dev/tty"
