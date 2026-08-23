@@ -11,7 +11,7 @@ public extension FilePath {
   ///
   /// - Throws: ``POSIXErrno`` if `lstat(2)` fails.
   func isRegularFile() throws(POSIXErrno) -> Bool {
-    if #available(macOS 27.0, iOS 27.0, *) {
+    if #available(anyAppleOS 27.0, *) {
       do {
         let statBuf = try self.stat(followTargetSymlink: false)
         return statBuf.type == .regular
@@ -191,7 +191,7 @@ public extension FilePath {
     var d = FilePath((self.root ?? FilePath.Root(".")).string)
     for p in self.components {
       d.append(p)
-      if #available(macOS 27.0, iOS 27.0, *) {
+      if #available(anyAppleOS 27.0, *) {
         if (try? d.stat().type) == .directory { continue }
       } else {
         if (try? FileMetadata(for: d))?.filetype == .directory { continue }
@@ -242,7 +242,7 @@ public extension FilePath {
   /// - Throws: ``POSIXErrno`` if any removal step fails.
   func removeTree() throws(POSIXErrno) {
     let isdir : Bool
-    if #available(macOS 27.0, iOS 27.0, *) {
+    if #available(anyAppleOS 27.0, *) {
       guard let st = try? self.stat(followTargetSymlink: false) else {
         return
       }

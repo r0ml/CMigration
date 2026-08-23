@@ -493,8 +493,7 @@ public enum FileType {
 /// Obsolete in macOS 27.0 when Swift System added Stat
 ///
 /// All timestamps are represented as ``DateTime`` values.
-@available(macOS, obsoleted: 27.0)
-@available(iOS, obsoleted: 27.0)
+@available(anyAppleOS, obsoleted: 27.0)
   public struct FileMetadata {
     /// Device inode resides on.
     public var device : UInt
