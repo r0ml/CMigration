@@ -443,13 +443,13 @@ public enum FileType {
   /// A Unix domain socket.
   case socket
   /// A block-special device.
-  case blockDevice
+  case blockSpecial
   /// A whiteout entry.
-  case whiteOut
+  case whiteout
   /// A directory.
   case directory
   /// A character-special device.
-  case characterDevice
+  case characterSpecial
   /// A named pipe (FIFO).
   case fifo
   /// An unrecognised or unknown file type.
@@ -462,11 +462,11 @@ public enum FileType {
     switch rawValue & S_IFMT {
       case S_IFREG: self = .regular
       case S_IFLNK: self = .symbolicLink
-      case S_IFBLK: self = .blockDevice
+      case S_IFBLK: self = .blockSpecial
       case S_IFSOCK: self = .socket
-      case S_IFWHT: self = .whiteOut
+      case S_IFWHT: self = .whiteout
       case S_IFDIR : self = .directory
-      case S_IFCHR: self = .characterDevice
+      case S_IFCHR: self = .characterSpecial
       case S_IFIFO: self = .fifo
       default: self = .unknown
     }
@@ -477,11 +477,11 @@ public enum FileType {
     switch self {
       case .regular: return S_IFREG
       case .symbolicLink: return S_IFLNK
-      case .blockDevice: return S_IFBLK
+      case .blockSpecial: return S_IFBLK
       case .socket: return S_IFSOCK
-      case .whiteOut: return S_IFWHT
+      case .whiteout: return S_IFWHT
       case .directory: return S_IFDIR
-      case .characterDevice: return S_IFCHR
+      case .characterSpecial: return S_IFCHR
       case .fifo: return S_IFIFO
       case .unknown: return 0
     }
@@ -502,7 +502,7 @@ public enum FileType {
     /// Protection mode bits.
     public var permissions: FilePermissions
     /// File type.
-    public var filetype : FileType
+    public var type : FileType
     /// Number of hard links.
     public var links : UInt
     /// User ID of the owner.
@@ -573,7 +573,7 @@ public enum FileType {
       device = UInt(UInt32(bitPattern: statbuf.st_dev))
       inode = UInt(statbuf.st_ino)
       permissions = FilePermissions(rawValue: statbuf.st_mode)
-      filetype = FileType(rawValue: statbuf.st_mode)
+      type = FileType(rawValue: statbuf.st_mode)
       links = UInt(statbuf.st_nlink)
       rawDevice = UInt(UInt32(bitPattern: statbuf.st_rdev))
       userId = UInt(statbuf.st_uid)

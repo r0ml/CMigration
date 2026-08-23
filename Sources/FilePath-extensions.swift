@@ -20,7 +20,7 @@ public extension FilePath {
       }
     } else {
       let statBuf = try FileMetadata(for: self, followSymlinks: false)
-      return statBuf.filetype == .regular
+      return statBuf.type == .regular
     }
   }
 
@@ -194,7 +194,7 @@ public extension FilePath {
       if #available(anyAppleOS 27.0, *) {
         if (try? d.stat().type) == .directory { continue }
       } else {
-        if (try? FileMetadata(for: d))?.filetype == .directory { continue }
+        if (try? FileMetadata(for: d))?.type == .directory { continue }
       }
       if 0 != mkdir(d.string, pr.rawValue) {
         throw POSIXErrno(fn: "createDirectory")
@@ -251,7 +251,7 @@ public extension FilePath {
       guard let st = try? FileMetadata(for: self, followSymlinks: false) else {
         return
       }
-      isdir = st.filetype == .directory
+      isdir = st.type == .directory
     }
     if isdir {
       let j = try self.listDirectory()

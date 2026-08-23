@@ -50,9 +50,9 @@ public func strmode(_ mode : FileType, _ perm : FilePermissions) -> String {
   switch mode {
     case .directory:      /* directory */
       result.append("d")
-    case .characterDevice:      /* character special */
+    case .characterSpecial:      /* character special */
       result.append("c")
-    case .blockDevice:      /* block special */
+    case .blockSpecial:      /* block special */
       result.append("b")
     case .regular:      /* regular */
       result.append("-")
@@ -62,7 +62,7 @@ public func strmode(_ mode : FileType, _ perm : FilePermissions) -> String {
       result.append("s")
     case .fifo:        /* fifo */
       result.append("p")
-    case .whiteOut:      /* whiteout */
+    case .whiteout:      /* whiteout */
       result.append("w")
   default:      /* unknown */
       result.append("?")
