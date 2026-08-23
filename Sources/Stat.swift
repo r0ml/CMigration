@@ -18,6 +18,16 @@ public extension FilePath {
   }
 }
 
+public extension FileDescriptor {
+  func stat(followTargetSymlink: Bool = false) throws(Errno) -> Stat {
+    do {
+      return try Stat(for: self)
+    } catch let e {
+      throw Errno(rawValue: e.code)
+    }
+  }
+}
+
 // #if !canImport(Foundation, _version: "27.0")
 public struct DeviceID : Equatable, Hashable {
   public var rawValue: dev_t
