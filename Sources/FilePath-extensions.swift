@@ -6,22 +6,23 @@ import Darwin
 
 public extension FilePath {
   
+  #if !canImport(FoundationModels)
+  func stat(followTargetSymlinks: Bool = true) throws(Errno) -> Stat{
+    return Stat(for: self, followSymlinks: followTargetSymlinks)
+  }
+  #endif
 
   /// Returns `true` if the path refers to a regular file (not following symlinks).
   ///
   /// - Throws: ``POSIXErrno`` if `lstat(2)` fails.
   func isRegularFile() throws(POSIXErrno) -> Bool {
-    if #available(anyAppleOS 27.0, *) {
-      do {
-        let statBuf = try self.stat(followTargetSymlink: false)
-        return statBuf.type == .regular
-      } catch(let e) {
-        throw POSIXErrno(e.rawValue, fn: "stat", reason: string)
-      }
-    } else {
-      let statBuf = try FileMetadata(for: self, followSymlinks: false)
+    do {
+      let statBuf = try self.stat(followTargetSymlink: false)
       return statBuf.type == .regular
+    } catch(let e) {
+      throw POSIXErrno(e.rawValue, fn: "stat", reason: string)
     }
+    
   }
 
   /// Renames this path to `to`.
@@ -179,7 +180,7 @@ public extension FilePath {
     } catch(let e as Errno) {
       throw POSIXErrno(e.rawValue, fn: "linkat")
     } catch(let e) {
-      throw POSIXErrno(errno, fn: "linkat")
+      throw POSIXErrno(errno, fn: "linkat", reason: e.localizedDescription)
     }
   }
 
@@ -191,11 +192,7 @@ public extension FilePath {
     var d = FilePath((self.root ?? FilePath.Root(".")).string)
     for p in self.components {
       d.append(p)
-      if #available(anyAppleOS 27.0, *) {
         if (try? d.stat().type) == .directory { continue }
-      } else {
-        if (try? FileMetadata(for: d))?.type == .directory { continue }
-      }
       if 0 != mkdir(d.string, pr.rawValue) {
         throw POSIXErrno(fn: "createDirectory")
       }
@@ -241,18 +238,11 @@ public extension FilePath {
   ///
   /// - Throws: ``POSIXErrno`` if any removal step fails.
   func removeTree() throws(POSIXErrno) {
-    let isdir : Bool
-    if #available(anyAppleOS 27.0, *) {
       guard let st = try? self.stat(followTargetSymlink: false) else {
         return
       }
-      isdir = st.type == .directory
-    } else {
-      guard let st = try? FileMetadata(for: self, followSymlinks: false) else {
-        return
-      }
-      isdir = st.type == .directory
-    }
+      let isdir = st.type == .directory
+
     if isdir {
       let j = try self.listDirectory()
       for i in j {
