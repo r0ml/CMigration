@@ -148,9 +148,9 @@ public struct FileMode : Equatable, Hashable {
       st_atim = statbuf.st_atimespec
       st_mtim = statbuf.st_mtimespec
       st_ctim = statbuf.st_ctimespec
-      size = UInt(statbuf.st_size)
+      size = Int64(statbuf.st_size)
       blocksAllocated = Int64(statbuf.st_blocks)
-      blockSize = UInt(statbuf.st_blksize)
+      preferredIOBlockSize = Int(statbuf.st_blksize)
       flags = FileFlags(rawValue: statbuf.st_flags)
       generationNumber = UInt64(statbuf.st_gen)
     }
