@@ -66,12 +66,12 @@ public typealias FileMode = mode_t
     ///
     /// - Parameters:
     ///   - f: The path to stat.
-    ///   - followSymlinks: When `true` (default), symlinks are followed via `stat(2)`;
+    ///   - followTargetSymlink: When `true` (default), symlinks are followed via `stat(2)`;
     ///     when `false`, `lstat(2)` is used.
     /// - Throws: ``POSIXErrno`` on failure.
-    public init(for f: FilePath, followSymlinks: Bool = true) throws(POSIXErrno) {
+    public init(for f: FilePath, followTargetSymlink: Bool = true) throws(POSIXErrno) {
       var statbuf = Darwin.stat()
-      let e = (followSymlinks ? stat : lstat)(f.string, &statbuf)
+      let e = (followTargetSymlink ? stat : lstat)(f.string, &statbuf)
       try self.init(e == 0 ? 0 : errno, statbuf)
     }
     

@@ -7,8 +7,8 @@ import Darwin
 public extension FilePath {
   
   #if !canImport(FoundationModels)
-  func stat(followTargetSymlinks: Bool = true) throws(Errno) -> Stat{
-    return Stat(for: self, followSymlinks: followTargetSymlinks)
+  func stat(followTargetSymlink: Bool = true) throws(Errno) -> Stat{
+    return Stat(for: self, followTargetSymlink: followTargetSymlink)
   }
   #endif
 
@@ -141,11 +141,11 @@ public extension FilePath {
   ///
   /// - Parameters:
   ///   - p: The desired permissions.
-  ///   - followSymlinks: When `false` (default), `lchmod(2)` is used so the symlink
+  ///   - followTargetSymlink: When `false` (default), `lchmod(2)` is used so the symlink
   ///     itself is changed rather than its target.
   /// - Throws: ``POSIXErrno`` if the chmod call fails.
-  func setPermissions(_ p : FilePermissions, followSymlinks: Bool = false) throws(POSIXErrno) {
-    let f = followSymlinks ? chmod : lchmod
+  func setPermissions(_ p : FilePermissions, followTargetSymlink: Bool = false) throws(POSIXErrno) {
+    let f = followTargetSymlink ? chmod : lchmod
     if 0 != f(self.string, p.rawValue) {
       throw POSIXErrno(fn: "setPermissions", reason: self.string)
     }
