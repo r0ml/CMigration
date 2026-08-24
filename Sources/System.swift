@@ -71,7 +71,7 @@ public struct Sysctl {
   /// - Returns: The value loaded from the sysctl buffer, interpreted as `T`.
   /// - Throws: ``POSIXErrno`` if the sysctl call fails.
   public static func get<T>(_ name : String) throws(POSIXErrno) -> T {
-    var s : Int = 0
+    var s : Int = MemoryLayout<T>.size
     let (e , r ) : (POSIXErrno?, T?) = name.withCString { nm in
       return withUnsafeTemporaryAllocation(byteCount: MemoryLayout<T>.size, alignment: 16 ) { b in
         if sysctlbyname(nm, b.baseAddress, &s, nil, 0) == -1 {

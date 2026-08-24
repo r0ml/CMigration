@@ -189,6 +189,7 @@ public extension FilePath {
   /// - Parameter pr: The permissions to apply to each created directory.
   /// - Throws: ``POSIXErrno`` if any `mkdir(2)` call fails.
   func createDirectory(_ pr : FilePermissions) throws(POSIXErrno) {
+    // FIXME: go the eother way -- check the full dir component first, then remove the last component until a directory exists -- then work forward creating directories
     var d = FilePath((self.root ?? FilePath.Root(".")).string)
     for p in self.components {
       d.append(p)
