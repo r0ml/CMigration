@@ -176,6 +176,10 @@ public actor DarwinProcess {
   var awaitingValue = false
   var launched = false
 
+  /// True when the child was spawned into its own process group and is therefore its own
+  /// group leader — the precondition for ``killGroup(_:)``.
+  var ownProcessGroup = false
+
   var pendingOutput : [UInt8] = []
 
   /// Creates an unstarted `DarwinProcess`.
@@ -185,7 +189,24 @@ public actor DarwinProcess {
   ///
   /// - Parameter n: The signal number. Defaults to `SIGTERM`.
   public func kill(_ n : Int32 = SIGTERM) {
-    Darwin.kill(pid, SIGTERM)
+    Darwin.kill(pid, n)
+  }
+
+  /// Sends `n` to every process in the child's process group.
+  ///
+  /// Requires the child to have been launched with `newProcessGroup: true`; otherwise the child
+  /// shares the caller's process group, and signalling that group would hit this process too.
+  ///
+  /// - Parameter n: The signal number. Defaults to `SIGTERM`.
+  /// - Throws: ``POSIXErrno`` if the child is not its own group leader, or if `killpg(2)` fails.
+  public func killGroup(_ n : Int32 = SIGTERM) throws(POSIXErrno) {
+    guard ownProcessGroup else {
+      throw log(POSIXErrno(EPERM, fn: "killGroup",
+                           reason: "child was not launched with newProcessGroup: true"))
+    }
+    if Darwin.killpg(pid, n) == -1 {
+      throw log(POSIXErrno(fn: "killpg"))
+    }
   }
 
   /// Returns accumulated stdout bytes and clears the internal buffer.
@@ -208,6 +229,7 @@ public actor DarwinProcess {
   ///   - arguments: Command-line arguments (variadic).
   ///   - env: Extra environment variables merged over the parent's environment.
   ///   - cd: Optional working directory for the child.
+  ///   - newProcessGroup: When `true`, the child is spawned into its own process group.
   ///   - captureOutput: When `true` (default), stdout is captured.
   /// - Returns: A running `DarwinProcess`.
   /// - Throws: ``POSIXErrno`` if spawning fails.
@@ -217,12 +239,13 @@ public actor DarwinProcess {
     args arguments: any Arguable...,
     env : [String : String] = [:],
     cd : FilePath? = nil,
+    newProcessGroup : Bool = false,
     encoding: IEncoding = .utf8,
     output: (FileDescriptor?, FileDescriptor?)? = nil
   ) async throws(POSIXErrno) -> DarwinProcess {
     let p = DarwinProcess()
     let _ = try await p.launch(executablePath, withStdin: withStdin, args: arguments, env: env, cd: cd,
-                               encoding: encoding, output: output)
+                               newProcessGroup: newProcessGroup, encoding: encoding, output: output)
     return p
   }
 
@@ -265,6 +288,7 @@ public actor DarwinProcess {
   ///   - arguments: Command-line arguments (variadic).
   ///   - env: Extra environment variables merged over the parent's environment.
   ///   - cd: Optional working directory.
+  ///   - newProcessGroup: When `true`, the child is spawned into its own process group.
   ///   - captureOutput: Whether to capture stdout.
   /// - Returns: The child PID.
   /// - Throws: ``POSIXErrno`` if spawning fails.
@@ -274,11 +298,12 @@ public actor DarwinProcess {
     args arguments: any Arguable...,
     env : [String : String] = [:],
     cd : FilePath? = nil,
+    newProcessGroup : Bool = false,
     encoding: IEncoding = .utf8,
     output: (FileDescriptor?, FileDescriptor?)? = nil
   ) throws(POSIXErrno) -> pid_t {
     return try launch(executablePath, withStdin: withStdin, args: arguments, env: env, cd: cd,
-                      encoding: encoding, output: output)
+                      newProcessGroup: newProcessGroup, encoding: encoding, output: output)
   }
 
   /*
@@ -327,6 +352,10 @@ public actor DarwinProcess {
   ///   - arguments: Command-line arguments.
   ///   - env: Extra environment variables merged over the parent's environment.
   ///   - cd: Optional working directory (macOS only, via `posix_spawn_file_actions_addchdir_np`).
+  ///   - newProcessGroup: When `true`, the child becomes the leader of a new process group
+  ///     (its pgid equals its pid) rather than joining the parent's, enabling ``killGroup(_:)``.
+  ///     Leave this `false` when handing the child a terminal as stdin: a background process
+  ///     group reading the controlling terminal is stopped with `SIGTTIN`.
   ///   - captureOutput: When `true` and `stdout` is nil, stdout is captured into ``pendingOutput``.
   ///   - stdout: When non-nil, the child's stdout is dup2'd to this descriptor instead of being piped.
   ///   - stderr: When non-nil, the child's stderr is dup2'd to this descriptor instead of being piped.
@@ -338,6 +367,7 @@ public actor DarwinProcess {
     args arguments: [any Arguable] = [],
     env : [String : String] = [:],
     cd : FilePath? = nil,
+    newProcessGroup : Bool = false,
     encoding: IEncoding = .utf8,
     output: (FileDescriptor?, FileDescriptor?)? = (nil, nil)
   ) throws(POSIXErrno) -> pid_t {
@@ -529,8 +559,11 @@ public actor DarwinProcess {
 
     
     
-    guard posix_spawnattr_init(&attr) == 0 else {
-      throw log(POSIXErrno(fn: "posix_spawnattr_init"))
+    // The posix_spawn* family reports failure via its return value and does not set errno,
+    // so the returned code is what must be handed to POSIXErrno.
+    let rcAttrInit = posix_spawnattr_init(&attr)
+    if rcAttrInit != 0 {
+      throw log(POSIXErrno(rcAttrInit, fn: "posix_spawnattr_init"))
     }
     defer {
       posix_spawnattr_destroy(&attr)
@@ -544,8 +577,25 @@ public actor DarwinProcess {
       flags |= Int16(POSIX_SPAWN_START_SUSPENDED)
     }
 
-    guard posix_spawnattr_setflags(&attr, flags) == 0 else {
-      throw log(POSIXErrno(fn: "posix_spawnattr_setflags"))
+    if newProcessGroup {
+      flags |= Int16(POSIX_SPAWN_SETPGROUP)
+    }
+
+    let rcSetFlags = posix_spawnattr_setflags(&attr, flags)
+    if rcSetFlags != 0 {
+      throw log(POSIXErrno(rcSetFlags, fn: "posix_spawnattr_setflags"))
+    }
+
+    if newProcessGroup {
+      // Give the child its own process group atomically at spawn time. Doing this as
+      // fork-then-setpgid races the exec: once the child has exec'd, the parent's setpgid
+      // call fails with EACCES. pgroup == 0 means "child becomes group leader", so the
+      // child's pgid ends up equal to its pid.
+      let rcPgroup = posix_spawnattr_setpgroup(&attr, 0)
+      if rcPgroup != 0 {
+        throw log(POSIXErrno(rcPgroup, fn: "posix_spawnattr_setpgroup"))
+      }
+      ownProcessGroup = true
     }
 
     var sig = sigset_t()
@@ -660,6 +710,7 @@ public actor DarwinProcess {
   ///   - arguments: Command-line arguments (variadic).
   ///   - env: Extra environment variables.
   ///   - cd: Optional working directory.
+  ///   - newProcessGroup: When `true`, the child is spawned into its own process group.
   ///   - captureOutput: Whether to capture stdout.
   /// - Returns: The ``Output`` produced by the child process.
   /// - Throws: Any error from ``launch(_:withStdin:args:env:cd:captureOutput:)-4r7v4`` or ``value()``.
@@ -669,11 +720,12 @@ public actor DarwinProcess {
     args arguments: any Arguable...,
     env : [String : String] = [:],
     cd : FilePath? = nil,
+    newProcessGroup : Bool = false,
     encoding: IEncoding = .utf8,
     output: (FileDescriptor?, FileDescriptor?)? = nil
   ) async throws -> Output {
     return try await run(executablePath, withStdin: withStdin, args: arguments, env: env, cd: cd,
-                         encoding: encoding, output: output)
+                         newProcessGroup: newProcessGroup, encoding: encoding, output: output)
   }
 
   /// Launches the process with an array of arguments and immediately awaits the result.
@@ -684,6 +736,7 @@ public actor DarwinProcess {
   ///   - arguments: Command-line arguments.
   ///   - env: Extra environment variables.
   ///   - cd: Optional working directory.
+  ///   - newProcessGroup: When `true`, the child is spawned into its own process group.
   ///   - captureOutput: Whether to capture stdout.
   /// - Returns: The ``Output`` produced by the child process.
   /// - Throws: Any error from ``launch(_:withStdin:args:env:cd:captureOutput:)-4r7v4`` or ``value()``.
@@ -693,6 +746,7 @@ public actor DarwinProcess {
     args arguments: [any Arguable] = [],
     env : [String : String] = [:],
     cd : FilePath? = nil,
+    newProcessGroup : Bool = false,
     encoding: IEncoding = .utf8,
     output: (FileDescriptor?, FileDescriptor?)? = nil
   ) async throws -> Output {
@@ -703,6 +757,7 @@ public actor DarwinProcess {
       args: arguments,
       env: env,
       cd: cd,
+      newProcessGroup: newProcessGroup,
       encoding: encoding,
       output: output
     )
