@@ -693,6 +693,7 @@ public class BSDGetopt {
       let gnuopt = ostr.contains("\(optopt)::" )
       if !place.isEmpty {
         optarg = place
+      } else if gnuopt { optarg = "" 
       } else if nargv.count > 1 {
         if gnuopt && nargv[1+nargv.startIndex].first == "-" {
           optarg = ""
