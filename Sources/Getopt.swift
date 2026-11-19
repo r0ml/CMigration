@@ -680,6 +680,7 @@ public class BSDGetopt {
       if ostr.first != ":" {
         throw CmdErr(1, "\(PROGNAME): illegal option -- \(optopt)")
       }
+      return ("?", "") // leading colon -- report '?' quietly, don't fall through
     }
 
     // Does this option need an argument?
