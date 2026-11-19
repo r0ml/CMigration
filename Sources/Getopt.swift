@@ -710,7 +710,7 @@ public class BSDGetopt {
         if gnuopt {
           optarg = ""
         } else {
-          throw CmdErr(1, "\(PROGNAME): option requires an argument \(optopt)")
+          throw CmdErr(1, "\(PROGNAME): option requires an argument -- \(optopt)")
         }
       }
       place = ""
