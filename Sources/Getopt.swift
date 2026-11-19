@@ -694,7 +694,7 @@ public class BSDGetopt {
         optarg = place
       } else if nargv.count > 1 {
         if gnuopt && nargv[1+nargv.startIndex].first == "-" {
-          optarg == ""
+          optarg = ""
         } else {
           nargv.removeFirst()
           optarg = nargv.first!
