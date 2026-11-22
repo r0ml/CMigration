@@ -179,6 +179,9 @@ public class BSDGetopt_long {
   /// The portion of the current argument that has not yet been consumed.
   var place = ""
 
+  /// The program name used to prefix error messages.
+  private var progname: String { String(cString: getprogname()) }
+
   /// Creates a `BSDGetopt_long` parser.
   ///
   /// - Parameters:
@@ -330,13 +333,13 @@ public class BSDGetopt_long {
     }
     if !exact_match && second_partial_match {
       // ambiguous abbreviation
-      throw CmdErr(1, "option `\(current_dash)\(current_key)' is ambiguous")
+      throw CmdErr(1, "\(progname): option `\(current_dash)\(current_key)' is ambiguous")
     }
 
     if match != -1 { // option found
       if let _ = has_equal, long_options[match].has_arg == .no_argument {
         throw CmdErr(
-          1, "option `\(current_dash)\(current_key)' doesn't allow an argument")
+          1, "\(progname): option `\(current_dash)\(current_key)' doesn't allow an argument")
       }
       if long_options[match].has_arg == .required_argument
         || long_options[match].has_arg == .optional_argument
@@ -355,14 +358,14 @@ public class BSDGetopt_long {
          * should be generated.
          */
         optind -= 1
-        throw CmdErr(1, "option `\(current_dash)\(current_key)' requires an argument")
+        throw CmdErr(1, "\(progname): option `\(current_dash)\(current_key)' requires an argument")
       }
     } else { // unknown option
       if short_too {
         optind -= 1
         return nil
       }
-      throw CmdErr(1, "unrecognized option `\(current_dash)\(current_key)'")
+      throw CmdErr(1, "\(progname): unrecognized option `\(current_dash)\(current_key)'")
     }
 
     return (long_options[match].name, optarg)
@@ -475,7 +478,7 @@ public class BSDGetopt_long {
       if place.first == "-" {
         place.removeFirst() /* --foo long option */
         if place.isEmpty {
-          throw CmdErr(1, "malformed option")
+          throw CmdErr(1, "\(progname): malformed option")
         }
 
         dash_prefix = DD_PREFIX
@@ -518,8 +521,8 @@ public class BSDGetopt_long {
         optind += 1
       }
       throw CmdErr( 1, posixly_correct ? 
-                    "illegal option -- \(optchar)"
-                    : "invalid option -- \(optchar)")
+                    "\(progname): illegal option -- \(optchar)"
+                    : "\(progname): invalid option -- \(optchar)")
     }
     if optchar == "W" && oli2 == ";" {
       // -W long-option
@@ -529,7 +532,7 @@ public class BSDGetopt_long {
         optind += 1
         if optind >= nargv.count { // no arg
           place = ""
-          throw CmdErr(1, "option requires an argument -- \(optchar)")
+          throw CmdErr(1, "\(progname): option requires an argument -- \(optchar)")
         } else { // white space
           place = nargv[optind]
         }
@@ -552,7 +555,7 @@ public class BSDGetopt_long {
         if optind >= nargv.count { // no arg
           place = ""
 
-          throw CmdErr(1, "option requires an argument -- \(optchar)")
+          throw CmdErr(1, "\(progname): option requires an argument -- \(optchar)")
         } else {
           optarg = nargv[optind]
         }
@@ -605,7 +608,7 @@ public class BSDGetopt {
   var place = ""
 
   /// The program name, taken from `argv[0]`.
-  let PROGNAME = CommandLine.arguments[0]
+  let PROGNAME = String(cString: getprogname())
 
   /// Creates a `BSDGetopt` parser.
   ///
