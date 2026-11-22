@@ -330,13 +330,13 @@ public class BSDGetopt_long {
     }
     if !exact_match && second_partial_match {
       // ambiguous abbreviation
-      throw CmdErr(1, "option \(current_dash)\(current_key) is ambiguous")
+      throw CmdErr(1, "option `\(current_dash)\(current_key)' is ambiguous")
     }
 
     if match != -1 { // option found
       if let _ = has_equal, long_options[match].has_arg == .no_argument {
         throw CmdErr(
-          1, "option \(current_dash)\(current_key) doesn't allow an argument")
+          1, "option `\(current_dash)\(current_key)' doesn't allow an argument")
       }
       if long_options[match].has_arg == .required_argument
         || long_options[match].has_arg == .optional_argument
@@ -355,14 +355,14 @@ public class BSDGetopt_long {
          * should be generated.
          */
         optind -= 1
-        throw CmdErr(1, "option \(current_dash)\(current_key) requires an argument")
+        throw CmdErr(1, "option `\(current_dash)\(current_key)' requires an argument")
       }
     } else { // unknown option
       if short_too {
         optind -= 1
         return nil
       }
-      throw CmdErr(1, "unrecognized option \(current_dash)\(current_key)")
+      throw CmdErr(1, "unrecognized option `\(current_dash)\(current_key)'")
     }
 
     return (long_options[match].name, optarg)
