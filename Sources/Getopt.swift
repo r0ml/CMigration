@@ -355,7 +355,8 @@ public class BSDGetopt_long {
           optind += 1
         }
       }
-      if long_options[match].has_arg == .required_argument && optarg == "" {
+      /*
+       if long_options[match].has_arg == .required_argument && optarg == "" {
         /*
          * Missing argument; leading ':' indicates no error
          * should be generated.
@@ -363,6 +364,7 @@ public class BSDGetopt_long {
         optind -= 1
         throw CmdErr(1, "\(progname): option `\(current_dash)\(current_key)' requires an argument")
       }
+      */
     } else { // unknown option
       if short_too {
         optind -= 1
