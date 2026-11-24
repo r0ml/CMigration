@@ -348,6 +348,9 @@ public class BSDGetopt_long {
           optarg = String(place.suffix(from: has_equal).dropFirst())
         } else if long_options[match].has_arg == .required_argument {
           // optional argument doesn't use next nargv
+          if optind >= nargv {
+            throw CmdErr(1, "\(progname): option `\(current_dash)\(current_key)' requires an argument")
+          }
           optarg = nargv[optind]
           optind += 1
         }
