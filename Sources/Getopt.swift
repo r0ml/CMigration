@@ -150,6 +150,8 @@ public class BSDGetopt_long {
 
   /// The option-definition string (e.g. `"abc:d::"` for `getopt`).
   var options: String
+  /// for remembering + - or nil option prefix
+  var optionsMode: Character? 
   /// The long-option table.
   var long_options: [LongOption]
   /// The argument array being parsed.
@@ -196,8 +198,12 @@ public class BSDGetopt_long {
     self.nargv = args
     self.long_options = long_options
     optind = 0
+    self.optionsMode = (s.first == "+" || s.first == "-") ? s.first : nil
+    self.options = optionsMode == nil ? s : String(s.dropFirst())
 
-    BADARG = s.first == ":" ? ":" : "?"
+    BADARG = self.options.first == ":" ? ":" : "?"   // line 199: look past the +/- like libc
+
+//    BADARG = s.first == ":" ? ":" : "?"
 
     // Disable GNU extensions if POSIXLY_CORRECT is set or options string begins with a '+'.
     posixly_correct = getenv("POSIXLY_CORRECT") != nil
@@ -325,8 +331,9 @@ public class BSDGetopt_long {
 
       if match == -1 { // first partial match
         match = i
-      } else if flags.contains(.FLAG_LONGONLY)
-        || long_options[i].has_arg != long_options[match].has_arg
+      } // else if flags.contains(.FLAG_LONGONLY)
+        //  || long_options[i].has_arg != long_options[match].has_arg
+      else
       {
         second_partial_match = true
       }
@@ -389,11 +396,19 @@ public class BSDGetopt_long {
     var short_too = false
 
     var flags = flagsx
+      if optionsMode == "-" {
+        flags.formUnion(.FLAG_ALLARGS)
+      } else if posixly_correct || optionsMode == "+" {
+        flags.remove(.FLAG_PERMUTE)
+      }
+/*    
+    var flags = flagsx
     if options.first == "-" {
       flags.formUnion(.FLAG_ALLARGS)
     } else if posixly_correct || options.first == "+" {
       flags.remove(.FLAG_PERMUTE)
     }
+ */
     if options.first == "+" || options.first == "-" {
       options.removeFirst()
     }
